@@ -12,9 +12,9 @@ def import_client(path):
     from pathlib import Path
     cfg=json.loads(Path(path).read_text(encoding='utf-8'))
     installed=cfg.get('installed',{})
-    if installed.get('auth_uri')!='https://accounts.google.com/o/oauth2/auth' or installed.get('token_uri')!='https://oauth2.googleapis.com/token' or not installed.get('client_id','').endswith('.apps.googleusercontent.com'):
+    if 'web' in cfg or installed.get('auth_uri')!='https://accounts.google.com/o/oauth2/auth' or installed.get('token_uri')!='https://oauth2.googleapis.com/token' or not installed.get('client_id','').endswith('.apps.googleusercontent.com'):
         raise ValueError('Import an official Google OAuth Desktop app client JSON.')
-    keyring.set_password(SERVICE,'client-config',json.dumps(cfg))
+    keyring.set_password(SERVICE,'client-config',json.dumps({'installed':installed}))
 
 def connect(allow_send=False):
     import keyring

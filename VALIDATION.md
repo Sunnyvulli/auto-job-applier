@@ -31,4 +31,4 @@ On 2026-10-21, the adapter parsed 897 Databricks listings through Greenhouse and
 - Windows workflow additionally checks packaged OAuth imports and a temporary synthetic credential round trip in the Windows vault. Its result must pass before publication.
 - Real employer application submission, real signup, live user Gmail OAuth consent and real inbox credentials are still not validated by fixtures.
 
-0.2 local result: **50 tests passed** on Linux/Python 3.12. Read-only SmartRecruiters BoschGroup import completed with 5,099 valid listings (the live count changed from the initial API preflight). Ashby Ramp returned 170. No application or account registration was submitted.
+0.2 local result: **51 tests passed** on Linux/Python 3.12. Read-only SmartRecruiters BoschGroup import completed with 5,099 valid listings (the live count changed from the initial API preflight). Ashby Ramp returned 170. No application or account registration was submitted.

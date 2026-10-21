@@ -150,3 +150,11 @@ def test_gmail_send_uses_verified_account(monkeypatch):
     msg=email.message_from_bytes(base64.urlsafe_b64decode(captured['json']['raw']))
     assert msg['From']=='verified@example.com' and msg['To']=='recruiter@example.com'
     with pytest.raises(ValueError):google_mail.send('a@example.com','Header\r\nBcc: x@example.com','body')
+
+
+def test_google_rejects_shadow_web_configuration(tmp_path,vault):
+    path=tmp_path/'client.json'
+    cfg={'installed':{'auth_uri':'https://accounts.google.com/o/oauth2/auth','token_uri':'https://oauth2.googleapis.com/token','client_id':'a.apps.googleusercontent.com'},'web':{'auth_uri':'https://attacker.example'}}
+    path.write_text(json.dumps(cfg))
+    with pytest.raises(ValueError):google_mail.import_client(path)
+    assert ('ApplyPilotGoogle','client-config') not in vault

@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import hashlib
 import html
 import json
@@ -40,10 +41,15 @@ class Store:
             CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY, job_id TEXT, sender TEXT, subject TEXT, body TEXT, stage TEXT, at TEXT);
             ''')
             c.execute("UPDATE jobs SET status='uncertain', note='Interrupted session: check portal before retrying.' WHERE status='running'")
+    @contextmanager
     def connect(self):
         c = sqlite3.connect(self.db, timeout=20)
         c.row_factory = sqlite3.Row
-        return c
+        try:
+            with c:
+                yield c
+        finally:
+            c.close()
     def setting(self, key, default=None):
         with self.connect() as c:
             r = c.execute('SELECT value FROM settings WHERE key=?', (key,)).fetchone()
@@ -80,7 +86,7 @@ class Store:
             return [dict(r) for r in c.execute('SELECT * FROM events ORDER BY id DESC LIMIT 300')]
 
 def fetch_json(url):
-    req = Request(url, headers={'User-Agent':'ApplyPilot/0.1 personal job assistant'})
+    req = Request(url, headers={'User-Agent':'ApplyPilot/0.2 personal job assistant'})
     with urlopen(req, timeout=25) as r:
         limit=32 * 1024 * 1024
         payload=r.read(limit+1)
@@ -88,8 +94,9 @@ def fetch_json(url):
         return json.loads(payload)
 
 def import_board(provider, company, region='global'):
-    if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', company):
-        raise ValueError('Enter the board identifier, not a URL.')
+    from .sources import board_identifier, extended_board
+    company=board_identifier(provider,company)
+    if provider in {'Ashby','SmartRecruiters'}:return extended_board(provider,company)
     if provider == 'Greenhouse':
         data = fetch_json(f'https://boards-api.greenhouse.io/v1/boards/{company}/jobs?content=true')
         return [dict(url=j['absolute_url'],company=company,title=j['title'],location=j.get('location',{}).get('name',''),description=plain(j.get('content',''))) for j in data['jobs']]
@@ -111,6 +118,8 @@ def documents(store, profile, job):
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
     if not profile.get('name') or not profile.get('email'):
         raise ValueError('Save your name and email in Profile first.')
+    from .sources import hydrate_job
+    job=hydrate_job(store,job)
     dest = store.folder / 'documents' / job['id']
     dest.mkdir(parents=True, exist_ok=True)
     evidence = match(profile, job)

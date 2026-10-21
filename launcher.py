@@ -27,6 +27,17 @@ def smoke_test(report):
                 browser=p.chromium.launch(headless=True,chromium_sandbox=True)
                 page=browser.new_page();page.set_content('<h1>Bundled Chromium works</h1>');assert page.locator('h1').inner_text()=='Bundled Chromium works';browser.close()
             checks.append('bundled Chromium launch')
+            from google_auth_oauthlib.flow import InstalledAppFlow
+            checks.append('OAuth library import')
+            from applypilot.accounts import save_account
+            import keyring, secrets
+            account='smoke-'+secrets.token_hex(8)+'@example.com'
+            origin=save_account(app.store,'https://fixture.invalid',account)
+            try:
+                assert len(keyring.get_password('ApplyPilotPortal:'+origin,account))==24
+                checks.append('Windows credential vault round trip')
+            finally:
+                keyring.delete_password('ApplyPilotPortal:'+origin,account)
             root.destroy();root=None
         Path(report).write_text(json.dumps({'ok':True,'checks':checks}),encoding='utf-8')
         return 0

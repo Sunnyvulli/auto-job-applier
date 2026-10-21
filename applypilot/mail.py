@@ -6,14 +6,15 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 from email.policy import default
-from .core import now
+from .core import now, plain
 
 HOSTS={'Gmail':('imap.gmail.com','smtp.gmail.com'),'Outlook':('outlook.office365.com','smtp.office365.com')}
 
 def parse_message(raw):
     msg=email.message_from_bytes(raw,policy=default)
-    part=msg.get_body(preferencelist=('plain',)) if msg.is_multipart() else msg
-    body=part.get_content() if part and part.get_content_type()=='text/plain' else ''
+    part=msg.get_body(preferencelist=('plain','html')) if msg.is_multipart() else msg
+    body=part.get_content() if part and part.get_content_type() in {'text/plain','text/html'} else ''
+    if part and part.get_content_type()=='text/html':body=plain(body)
     return {'id':hashlib.sha256(raw).hexdigest(),'sender':str(msg.get('From','')),'subject':str(msg.get('Subject','')),'body':str(body)[:50000]}
 
 def classify(subject,body):
@@ -33,25 +34,33 @@ def ingest(store,raw):
         c.execute('INSERT OR IGNORE INTO messages VALUES(?,?,?,?,?,?,?)',(m['id'],jid,m['sender'],m['subject'],m['body'],stage,now()))
     return stage
 
-def sync(store, provider, address):
+def recent_raw(provider,address,limit=100):
     import keyring
     password=keyring.get_password('ApplyPilotMail',address)
-    if not password: raise ValueError('Save a mail app password first. OAuth-only accounts are not supported yet.')
+    if not password:raise ValueError('Save a mail app password first, or select Gmail OAuth.')
     host=HOSTS[provider][0]
-    count=0
     with imaplib.IMAP4_SSL(host,ssl_context=ssl.create_default_context()) as client:
-        client.login(address,password)
-        client.select('INBOX',readonly=True)
+        client.login(address,password);client.select('INBOX',readonly=True)
         status,data=client.uid('search',None,'ALL')
-        if status!='OK': raise ValueError('Inbox search failed')
-        for uid in data[0].split()[-100:]:
+        if status!='OK':raise ValueError('Inbox search failed')
+        for uid in reversed(data[0].split()[-limit:]):
             status,items=client.uid('fetch',uid,'(BODY.PEEK[])')
             if status=='OK':
                 for item in items:
-                    if isinstance(item,tuple): ingest(store,item[1]); count+=1
+                    if isinstance(item,tuple):yield item[1]
+
+def sync(store, provider, address):
+    if provider=='Gmail OAuth':
+        from .google_mail import sync as gmail_sync
+        return gmail_sync(store)
+    count=0
+    for raw in recent_raw(provider,address):ingest(store,raw);count+=1
     return count
 
 def send(provider,address,to,subject,body):
+    if provider=='Gmail OAuth':
+        from .google_mail import send as gmail_send
+        return gmail_send(to,subject,body)
     import keyring
     from email.utils import parseaddr
     if any('\n' in s or '\r' in s for s in (address,to,subject)): raise ValueError('Invalid mail header')

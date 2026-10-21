@@ -1,4 +1,4 @@
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 [Setup]
 AppId={{9B7DF023-BF23-4660-9C48-19CD45B93374}
 AppName=ApplyPilot

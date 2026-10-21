@@ -20,3 +20,15 @@ No live employer application was submitted. No real email inbox was connected. N
 ## Read-only live import check
 
 On 2026-10-21, the adapter parsed 897 Databricks listings through Greenhouse and 304 Palantir listings through Lever with valid title/URL fields. These are source-adapter checks, not eligibility endorsements. Supabase returned 404 for the tested Greenhouse board identifier, which was handled as an import error. No applications were sent.
+
+## 0.2 development
+
+- Added Ashby and paginated SmartRecruiters feeds, board URL validation, selected-job detail hydration and recurring saved-source refresh.
+- Added exact-origin credential-vault helpers, scoped email-code extraction/filling, Gmail Desktop OAuth integration, HTML mail parsing and optional recurring mail sync.
+- Browser fixtures cover multi-step advancement, hidden file uploads, required custom dropdown handoff, credential-origin isolation, third-party frame exclusion and explicit OTP targeting.
+- Local tests exercise stale/wrong-sender/wrong-recipient/ambiguous code rejection, OAuth client endpoint checks, source pagination, password absence from SQLite and deterministic connection closure.
+- Read-only live check: Ashby Ramp returned 170 valid listings; the Notion board returned HTTP 403 in this environment. Empty responses for other tested company identifiers are treated as zero results, not claimed as coverage of those companies.
+- Windows workflow additionally checks packaged OAuth imports and a temporary synthetic credential round trip in the Windows vault. Its result must pass before publication.
+- Real employer application submission, real signup, live user Gmail OAuth consent and real inbox credentials are still not validated by fixtures.
+
+0.2 local result: **50 tests passed** on Linux/Python 3.12. Read-only SmartRecruiters BoschGroup import completed with 5,099 valid listings (the live count changed from the initial API preflight). Ashby Ramp returned 170. No application or account registration was submitted.

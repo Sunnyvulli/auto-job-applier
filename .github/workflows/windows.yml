@@ -32,7 +32,7 @@ jobs:
       - run: python -m playwright install chromium
       - run: python -m pytest tests/test_core.py -q
       - name: Freeze app with Python and Chromium
-        run: python -m PyInstaller --noconfirm --clean --windowed --name ApplyPilot --collect-all playwright --collect-all reportlab --hidden-import keyring.backends.Windows --add-data "browsers;browsers" launcher.py
+        run: python -m PyInstaller --noconfirm --clean --windowed --name ApplyPilot --collect-all playwright --collect-all reportlab --hidden-import keyring.backends.Windows --copy-metadata google-auth --copy-metadata google-auth-oauthlib --copy-metadata requests-oauthlib --add-data "browsers;browsers" launcher.py
       - name: Compile installer
         shell: pwsh
         run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\installer.iss'
@@ -58,4 +58,6 @@ jobs:
         shell: pwsh
         run: |
           $tag = "build-${{ github.run_number }}"
-          gh release create $tag installer-output/ApplyPilot-Setup.exe --title "ApplyPilot 0.1 preview ($tag)" --notes "Free local preview. Bundles Python and Chromium. See README for supported features and limitations. Unsigned installer."
+          $head = gh api "repos/${{ github.repository }}/commits/main" --jq .sha
+          if ($head -ne "${{ github.sha }}") { Write-Output "Skipping superseded build release"; exit 0 }
+          gh release create $tag installer-output/ApplyPilot-Setup.exe --target "${{ github.sha }}" --title "ApplyPilot 0.2 preview ($tag)" --notes "Free local preview with four job feeds, account helpers and optional Gmail OAuth. Bundles Python and Chromium. See README for supported features and limitations. Unsigned installer."

@@ -66,3 +66,44 @@ def test_single_instance_lock(tmp_path):
         with pytest.raises(RuntimeError):acquire(tmp_path)
     finally:first.close()
     acquire(tmp_path).close()
+
+def test_hidden_resume_upload(page,tmp_path):
+    (tmp_path/'resume.pdf').write_bytes(b'resume')
+    page.set_content('<label for="resume">Resume</label><input id="resume" type=file style="display:none">')
+    assert not fill_page(page,{},tmp_path)
+    assert page.locator('input').evaluate('e=>e.files.length')==1
+
+def test_required_custom_dropdown_blocks_auto(page,tmp_path):
+    page.set_content('<div role=combobox aria-required=true aria-label="Country">Select</div>')
+    assert 'Country' in fill_page(page,{},tmp_path)
+
+def test_account_fill_exact_origin_and_no_iframe(page,tmp_path,monkeypatch):
+    import keyring
+    from applypilot.core import Store
+    from applypilot.accounts import fill_account
+    store=Store(tmp_path/'store');store.save_setting('accounts',{'https://portal.example.com':'me@example.com'})
+    monkeypatch.setattr(keyring,'get_password',lambda *a:'saved-password')
+    page.route('**/*',lambda route:route.fulfill(content_type='text/html',body='<input type=email><input type=password><iframe srcdoc="<input type=password>"></iframe>'))
+    page.goto('https://portal.example.com/login')
+    assert fill_account(page,store)==2
+    assert page.locator('input[type=password]').input_value()=='saved-password'
+    assert page.frames[1].locator('input').input_value()==''
+    page.goto('https://other.example.com/login')
+    with pytest.raises(ValueError):fill_account(page,store)
+
+def test_code_field_explicit_only(page):
+    from applypilot.verification import fill_code
+    page.set_content('<input autocomplete=one-time-code><input type=password>')
+    fill_code(page,'123456');assert page.locator('input').first.input_value()=='123456'
+    assert page.locator('input[type=password]').input_value()==''
+    page.set_content('<input placeholder="Anything">')
+    with pytest.raises(ValueError):fill_code(page,'123456')
+
+def test_multistep_browser_process(page,tmp_path):
+    from applypilot.core import Store
+    from applypilot.browser import BrowserWorker
+    store=Store(tmp_path/'db');jid=store.add(dict(url='https://jobs.lever.co/acme/1/apply',company='Acme',title='Role'))
+    page.route('**/*',lambda r:r.fulfill(content_type='text/html',body='''<label>Full name<input required></label><button onclick="document.body.innerHTML='<label>Email<input type=email required></label><button onclick=finish()>Submit application</button>'">Next</button><script>function finish(){document.body.innerHTML='Thank you for applying'}</script>'''))
+    page.goto('https://jobs.lever.co/acme/1/apply')
+    worker=BrowserWorker(store,lambda _:None)
+    assert worker.process(page,jid,store.job(jid),{'name':'Test User','email':'test@example.com'},tmp_path,True)=='submitted'

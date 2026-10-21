@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -11,6 +12,8 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 from .core import Store, documents, import_board, match
 from .browser import BrowserWorker
 from . import mail
+from .sources import PROVIDERS, board_identifier
+from . import accounts, google_mail
 
 FIELDS=['name','email','phone','location','linkedin','website','skills','summary','experience','projects','education']
 
@@ -19,14 +22,15 @@ class App:
         self.root=root
         self.store=Store(folder or Path(os.getenv('LOCALAPPDATA',str(Path.home()/'.local/share')))/'ApplyPilot')
         self.queue=queue.Queue();self.worker=BrowserWorker(self.store,self.queue.put)
-        root.title('ApplyPilot · Your local job application assistant');root.geometry('1180x820');root.minsize(940,650)
+        root.title('ApplyPilot 0.2 · Your local job application assistant');root.geometry('1180x820');root.minsize(940,650)
         style=ttk.Style();style.theme_use('clam');style.configure('TFrame',background='#f4f6fa');style.configure('TLabel',background='#f4f6fa',font=('Segoe UI',10));style.configure('TButton',font=('Segoe UI',10),padding=8);style.configure('Treeview',rowheight=30,font=('Segoe UI',10));style.configure('Title.TLabel',font=('Segoe UI',23,'bold'),foreground='#172448');style.configure('Accent.TButton',foreground='white',background='#345be8')
         header=ttk.Frame(root,padding=18);header.pack(fill='x');ttk.Label(header,text='ApplyPilot',style='Title.TLabel').pack(side='left');ttk.Label(header,text='LOCAL FIRST  /  NO PAID API REQUIRED').pack(side='right')
         self.tabs=ttk.Notebook(root);self.tabs.pack(fill='both',expand=True,padx=16,pady=5)
-        self.profile_tab();self.jobs_tab();self.mail_tab();self.activity_tab()
+        self.profile_tab();self.jobs_tab();self.mail_tab();self.activity_tab();self.settings_tab()
+        self.import_lock=threading.Lock();self.mail_sync_lock=threading.Lock()
         self.status=tk.StringVar(value='Start by saving your verified profile. No applications run until you click Start.')
         ttk.Label(root,textvariable=self.status,padding=12,wraplength=1100).pack(fill='x')
-        self.refresh();self.pump();root.protocol('WM_DELETE_WINDOW',self.close)
+        self.refresh();self.pump();root.after(900000,self.scheduled_refresh);root.after(300000,self.scheduled_mail);root.protocol('WM_DELETE_WINDOW',self.close)
     def tab(self,name):
         t=ttk.Frame(self.tabs,padding=16);self.tabs.add(t,text=name);return t
     def guard(self,fn):
@@ -69,7 +73,7 @@ class App:
     def jobs_tab(self):
         t=self.tab('2  Jobs & applications')
         top=ttk.Frame(t);top.pack(fill='x')
-        self.provider=tk.StringVar(value='Greenhouse');ttk.Combobox(top,textvariable=self.provider,values=['Greenhouse','Lever'],width=14,state='readonly').pack(side='left')
+        self.provider=tk.StringVar(value='Greenhouse');ttk.Combobox(top,textvariable=self.provider,values=PROVIDERS,width=14,state='readonly').pack(side='left')
         self.board=tk.StringVar();ttk.Entry(top,textvariable=self.board,width=25).pack(side='left',padx=6)
         self.region=tk.StringVar(value='global');ttk.Combobox(top,textvariable=self.region,values=['global','eu'],width=8,state='readonly').pack(side='left')
         ttk.Button(top,text='Import company board',command=self.import_jobs).pack(side='left',padx=6)
@@ -87,6 +91,10 @@ class App:
         ttk.Button(actions,text='Stop',command=self.worker.stop).pack(side='left',padx=6)
         ttk.Button(actions,text='Refresh',command=self.refresh).pack(side='right')
         ttk.Button(actions,text='Set status',command=lambda:self.guard(self.set_status)).pack(side='right',padx=6)
+        helpers=ttk.Frame(t);helpers.pack(fill='x',pady=4)
+        ttk.Button(helpers,text='Fill saved account',command=lambda:self.guard(lambda:self.worker.request('account'))).pack(side='left')
+        ttk.Button(helpers,text='Fetch email code',command=lambda:self.guard(lambda:self.worker.request('otp'))).pack(side='left',padx=6)
+        ttk.Button(helpers,text='Account tools',command=lambda:self.guard(self.account_tools)).pack(side='left')
         self.auto=tk.BooleanVar(value=False);ttk.Checkbutton(t,text='Automatically submit on recognized Lever / Greenhouse pages when all required fields are resolved',variable=self.auto).pack(anchor='w',pady=10)
         ttk.Label(t,text='Login, account creation, CAPTCHA and complex questions use the visible browser. Complete them there, then Resume.').pack(anchor='w')
     def selected(self):
@@ -130,28 +138,53 @@ class App:
     def details(self):
         j=self.store.job(self.selected()[0]);win=tk.Toplevel(self.root);win.title(j['title']);box=tk.Text(win,width=100,height=30,wrap='word');box.pack(fill='both',expand=True);box.insert('1.0',json.dumps(j,indent=2));box.configure(state='disabled')
     def mail_tab(self):
-        t=self.tab('3  Email tracker');ttk.Label(t,text='Optional IMAP with an app password, or import .eml files. OAuth-only accounts need .eml import in this release.').pack(anchor='w')
+        t=self.tab('3  Email tracker');ttk.Label(t,text='Connect Gmail OAuth, use IMAP with an app password, or import .eml files. Connection remains on your computer.').pack(anchor='w')
         bar=ttk.Frame(t);bar.pack(fill='x',pady=10)
         settings=self.store.setting('mail',{});self.mailprovider=tk.StringVar(value=settings.get('provider','Gmail'));self.address=tk.StringVar(value=settings.get('address',''))
-        ttk.Combobox(bar,textvariable=self.mailprovider,values=list(mail.HOSTS),state='readonly',width=12).pack(side='left');ttk.Entry(bar,textvariable=self.address,width=35).pack(side='left',padx=6)
+        ttk.Combobox(bar,textvariable=self.mailprovider,values=list(mail.HOSTS)+['Gmail OAuth'],state='readonly',width=12).pack(side='left');ttk.Entry(bar,textvariable=self.address,width=35).pack(side='left',padx=6)
         ttk.Button(bar,text='Save app password',command=lambda:self.guard(self.save_mail)).pack(side='left')
         ttk.Button(bar,text='Sync recent 100 emails',command=self.sync_mail).pack(side='left',padx=6)
         ttk.Button(bar,text='Import .eml',command=lambda:self.guard(self.import_eml)).pack(side='left')
+        oauthbar=ttk.Frame(t);oauthbar.pack(fill='x',pady=6)
+        ttk.Button(oauthbar,text='Import Google client JSON',command=lambda:self.guard(self.import_google_client)).pack(side='left')
+        self.google_send=tk.BooleanVar(value=False);ttk.Checkbutton(oauthbar,text='Allow sending with Gmail OAuth',variable=self.google_send).pack(side='left',padx=6)
+        ttk.Button(oauthbar,text='Connect Gmail OAuth',command=self.connect_google).pack(side='left')
+        ttk.Button(oauthbar,text='Disconnect OAuth',command=lambda:self.background(google_mail.disconnect)).pack(side='left',padx=6)
         self.mailtree=ttk.Treeview(t,columns=('from','subject','stage'),show='headings')
         for c in ('from','subject','stage'):self.mailtree.heading(c,text=c.title());self.mailtree.column(c,width=300)
         self.mailtree.pack(fill='both',expand=True);self.mailtree.bind('<Double-1>',lambda e:self.guard(self.read_mail))
         ttk.Label(t,text='Email classification is advisory. It does not automatically change application status or send replies.').pack(anchor='w',pady=8)
         ttk.Button(t,text='Compose follow-up',command=self.compose).pack(side='left');ttk.Button(t,text='Refresh messages',command=self.refresh_mail).pack(side='left',padx=8)
+        self.repeat_mail=tk.BooleanVar(value=self.store.setting('repeat_mail',False))
+        ttk.Checkbutton(t,text='Sync mail every 5 minutes while the app is open',variable=self.repeat_mail,command=lambda:self.store.save_setting('repeat_mail',self.repeat_mail.get())).pack(side='right')
         self.refresh_mail()
     def save_mail(self):
         import keyring
         address=self.address.get().strip()
         if '@' not in address:raise ValueError('Enter your email address')
+        if self.mailprovider.get()=='Gmail OAuth':raise ValueError('Use Connect Gmail OAuth for this provider.')
         secret=simpledialog.askstring('Mail app password','Use a provider-generated app password, not your normal account password.',show='*')
         if secret:keyring.set_password('ApplyPilotMail',address,secret);self.store.save_setting('mail',dict(provider=self.mailprovider.get(),address=address));self.status.set('Saved in the operating-system credential store.')
     def sync_mail(self):
         provider=self.mailprovider.get();address=self.address.get().strip()
-        self.background(lambda:f'Synced {mail.sync(self.store,provider,address)} messages. Refresh messages to view results.')
+        self.store.save_setting('mail',dict(provider=provider,address=address))
+        self.run_mail_sync(provider,address)
+    def run_mail_sync(self,provider,address):
+        if not self.mail_sync_lock.acquire(blocking=False):self.status.set('Email sync is already running.');return
+        def work():
+            try:
+                with self.store.connect() as c:before={r[0] for r in c.execute('SELECT id FROM messages')}
+                count=mail.sync(self.store,provider,address)
+                with self.store.connect() as c:rows=c.execute("SELECT id,stage FROM messages WHERE stage='possible interview/action'").fetchall()
+                alerts=sum(r['id'] not in before for r in rows)
+                return f'Synced {count} messages. {alerts} new possible interview/action updates.'
+            finally:self.mail_sync_lock.release()
+        self.background(work)
+    def scheduled_mail(self):
+        if self.store.setting('repeat_mail',False):
+            config=self.store.setting('mail',{})
+            if config.get('address'):self.run_mail_sync(config.get('provider','Gmail'),config['address'])
+        self.root.after(300000,self.scheduled_mail)
     def import_eml(self):
         paths=filedialog.askopenfilenames(filetypes=[('Email','*.eml')])
         for path in paths:mail.ingest(self.store,Path(path).read_bytes())
@@ -175,6 +208,82 @@ class App:
             if messagebox.askyesno('Send email',f"Send this message to {entries['To'].get()}?"):
                 mail.send(self.mailprovider.get(),self.address.get(),entries['To'].get(),entries['Subject'].get(),body.get('1.0','end'));w.destroy();self.status.set('Email sent.')
         ttk.Button(w,text='Send this email',command=lambda:self.guard(submit)).pack(pady=10)
+    def import_google_client(self):
+        path=filedialog.askopenfilename(filetypes=[('Google Desktop OAuth client','*.json')])
+        if path:google_mail.import_client(path);self.status.set('Google client configuration saved in the OS vault. Connect Gmail OAuth next.')
+    def connect_google(self):
+        allow_send=self.google_send.get()
+        def work():
+            result=google_mail.connect(allow_send)
+            with google_mail.session() as client:
+                info=google_mail.checked(client.get('https://gmail.googleapis.com/gmail/v1/users/me/profile',timeout=25))
+            self.store.save_setting('mail',dict(provider='Gmail OAuth',address=info['emailAddress']))
+            return result+' Provider/address saved; choose Gmail OAuth in the email controls.'
+        self.background(work)
+    def account_tools(self):
+        w=tk.Toplevel(self.root);w.title('Account tools — exact portal origin');w.geometry('650x440')
+        values={}
+        defaults={'Portal URL':'','Account email':self.store.setting('profile',{}).get('email',''),'Verification sender':''}
+        ids=self.tree.selection()
+        if ids:defaults['Portal URL']=self.store.job(ids[0])['url']
+        for name in defaults:
+            ttk.Label(w,text=name).pack(anchor='w',padx=12,pady=5)
+            box=ttk.Entry(w,width=80);box.pack(padx=12,fill='x');box.insert(0,defaults[name]);values[name]=box
+        ttk.Label(w,text='Credentials apply only to the exact HTTPS origin. For shared ATS hosts, reuse one account only if the portal does. Enter a different login directly in the browser when accounts are tenant-specific.',wraplength=610).pack(padx=12,pady=10)
+        def save(generated):
+            url=values['Portal URL'].get();address=values['Account email'].get().strip()
+            password=None if generated else simpledialog.askstring('Existing account','Existing portal password',show='*',parent=w)
+            if not generated and not password:return
+            origin=accounts.account_origin(url)
+            configured=self.store.setting('accounts',{})
+            if generated and origin in configured and not messagebox.askyesno('Replace stored credential','A credential already exists for this origin. Generate and replace it?',parent=w):return
+            sender=values['Verification sender'].get().strip().lower()
+            if sender and ('@' not in sender or any(c in sender for c in '\r\n')):raise ValueError('Enter an exact sender email address.')
+            origin=accounts.save_account(self.store,url,address,password)
+            if sender:
+                mapping=self.store.setting('otp_senders',{});mapping[origin]=sender;self.store.save_setting('otp_senders',mapping)
+            self.status.set('Credential saved in OS vault. On the portal, use Fill saved account; review and submit account registration there.')
+            w.destroy()
+        ttk.Button(w,text='Generate password for new account',command=lambda:self.guard(lambda:save(True))).pack(padx=12,pady=5,anchor='w')
+        ttk.Button(w,text='Save existing account password',command=lambda:self.guard(lambda:save(False))).pack(padx=12,pady=5,anchor='w')
+    def settings_tab(self):
+        t=self.tab('5  Saved sources')
+        ttk.Label(t,text='One company board per line: provider | identifier or board URL | region (global/eu)').pack(anchor='w')
+        self.boards=tk.Text(t,height=15,width=100,font=('Consolas',11));self.boards.pack(fill='both',expand=True,pady=10)
+        self.boards.insert('1.0',self.store.setting('board_text',''))
+        bar=ttk.Frame(t);bar.pack(fill='x')
+        ttk.Button(bar,text='Save sources',command=lambda:self.guard(self.save_sources)).pack(side='left')
+        ttk.Button(bar,text='Refresh saved sources',command=self.refresh_sources).pack(side='left',padx=8)
+        self.repeat_sources=tk.BooleanVar(value=self.store.setting('repeat_sources',False))
+        ttk.Checkbutton(t,text='Refresh these sources every 15 minutes while ApplyPilot is open',variable=self.repeat_sources,command=lambda:self.store.save_setting('repeat_sources',self.repeat_sources.get())).pack(anchor='w',pady=10)
+        ttk.Label(t,text='Imports never trigger applications. Select suitable jobs in Jobs & applications before starting a queue.').pack(anchor='w')
+    def save_sources(self):
+        text=self.boards.get('1.0','end').strip();rows=[]
+        for line in text.splitlines():
+            if not line.strip():continue
+            parts=[p.strip() for p in line.split('|')]
+            if len(parts) not in (2,3) or parts[0] not in PROVIDERS:raise ValueError('Use Provider | company | optional region on each line.')
+            company=board_identifier(parts[0],parts[1]);region=parts[2] if len(parts)==3 else 'global'
+            if region not in ('global','eu'):raise ValueError('Region must be global or eu.')
+            rows.append(dict(provider=parts[0],company=company,region=region))
+        self.store.save_setting('boards',rows);self.store.save_setting('board_text',text);self.status.set(f'Saved {len(rows)} company sources.')
+    def refresh_sources(self):
+        if not self.import_lock.acquire(blocking=False):self.status.set('Saved sources are already refreshing.');return
+        def work():
+            results=[]
+            try:
+                for board in self.store.setting('boards',[]):
+                    try:
+                        jobs=import_board(board['provider'],board['company'],board['region'])
+                        for job in jobs:self.store.add(job)
+                        results.append(board['company']+': '+str(len(jobs)))
+                    except Exception as e:results.append(board['company']+': '+str(e)[:100])
+                return 'Source refresh complete. '+'; '.join(results)
+            finally:self.import_lock.release()
+        self.background(work)
+    def scheduled_refresh(self):
+        if self.store.setting('repeat_sources',False):self.refresh_sources()
+        self.root.after(900000,self.scheduled_refresh)
     def activity_tab(self):
         t=self.tab('4  Activity');self.log=tk.Text(t,wrap='word',font=('Consolas',10));self.log.pack(fill='both',expand=True)
         ttk.Button(t,text='Export application CSV',command=lambda:self.guard(self.export)).pack(anchor='w',pady=8)
@@ -193,8 +302,10 @@ class App:
     def pump(self):
         try:
             while True:
-                text=self.queue.get_nowait();self.status.set(text);self.log.insert('end',text+'\n');self.log.see('end');self.refresh()
-                if 'needs' in text.lower() or 'verification' in text.lower():self.root.bell()
+                text=self.queue.get_nowait();self.status.set(text);self.log.insert('end',text+'\n');self.log.see('end');self.refresh();self.refresh_mail()
+                if text.startswith('Gmail OAuth connected'):
+                    config=self.store.setting('mail',{});self.mailprovider.set(config.get('provider','Gmail OAuth'));self.address.set(config.get('address',''))
+                if 'needs' in text.lower() or 'verification' in text.lower() or re.search(r'\b[1-9]\d* new possible interview',text):self.root.bell()
         except queue.Empty:pass
         self.root.after(300,self.pump)
     def close(self):

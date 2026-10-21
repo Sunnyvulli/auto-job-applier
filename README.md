@@ -1,110 +1,82 @@
-# ApplyPilot
+# ApplyPilot 0.2
 
-A free, local Windows job application assistant. Your profile, documents, browser sessions and application history stay on your computer. No hosted server or paid AI API is required.
+Free local Windows job application assistant. No server subscription, paid AI API or CAPTCHA-solving service is configured. Profile, documents and application history remain on your computer.
 
-**Status: 0.1 preview.** This is working software with automated core/browser tests, not a universal job-portal robot. See the feature table before using it.
+**Preview software:** the feature coverage below is explicit. Real employer submissions and real account registrations have not been performed by the developer.
 
-## Download and install
+## Install
 
-1. Open [Releases](https://github.com/Sunnyvulli/auto-job-applier/releases/latest).
-2. Download **ApplyPilot-Setup.exe** when a successful Windows build is available.
-3. Run the installer. It bundles Python, required packages and Chromium; you do not install Python or Node yourself.
-4. Open ApplyPilot, enter your verified profile, add jobs and click **Start selected**.
+Download **ApplyPilot-Setup.exe** from [Releases](https://github.com/Sunnyvulli/auto-job-applier/releases/latest) after a successful build. Run it, save your profile, import company jobs, select suitable roles and click **Start selected**. The installer bundles Python, required packages and Chromium. No Python/Node installation is required. Internet is required for portals and mail. The installer is unsigned and Windows may show a reputation warning.
 
-The unsigned installer can produce a Windows reputation warning. Verify that you downloaded it from this repository. No commercial signing certificate is included. Internet is needed to import jobs, open portals or sync mail, but no dependency downloads are needed after installing the built installer.
+An existing installation can be upgraded using the same installer. Personal data remains under `%LOCALAPPDATA%\ApplyPilot`; binaries live under `%LOCALAPPDATA%\Programs\ApplyPilot`. Uninstall leaves personal records for recovery. Delete the data folder separately to erase them.
 
-If Releases has no installer, the Windows build is not complete or failed. Check [Actions](https://github.com/Sunnyvulli/auto-job-applier/actions). Source code alone is not an executable.
+## Feature coverage
 
-## What actually works
-
-| Feature | This release |
+| Feature | Implemented behavior |
 |---|---|
-| Profile and reusable exact answers | Local editor and JSON import |
-| Job imports | Greenhouse and Lever public company boards, including Lever EU |
-| Job filtering | Company/title/location text filter, skill keyword overlap |
-| Eligibility | User checks; overlap is not a sponsorship or eligibility decision |
-| Resume and cover letter | PDF and text templates built only from profile facts, skill ordering based on job description |
-| Browser autofill | Exact labeled fields, native selects and recognized document uploads; visible Chromium |
-| Automatic submission | Optional on recognized Greenhouse/Lever hosts when required controls are resolved and a unique submit button is found |
-| Other portals | Manual URL entry, best-effort exact autofill, human completion |
-| Account creation/login | Complete in persistent browser; no automatic signup/password generation |
-| CAPTCHA / device / SMS / authenticator | Human handoff in the same browser; no bypass or external paid solver |
-| Email OTP | Enter manually in the browser; automatic extraction not implemented |
-| Submission evidence | Local receipt JSON with URL, time and page text; positive confirmation required |
-| Duplicate handling | Unique URL, atomic claims, no automatic retry of submitted/uncertain applications |
-| Email tracking | Read-only IMAP using provider app password, or .eml file import |
-| Email updates | Advisory interview/rejection/confirmation classification, dashboard alerts during session |
-| Follow-up | Editable template and explicit Send; no unattended replies |
-| Exports | CSV with spreadsheet formula protection |
-| Scheduled discovery | Not implemented; start imports and queues from the app |
-| LLM writing | Not included; no model download, API bill or fabricated achievements |
+| Public job feeds | Greenhouse, Lever global/EU, Ashby and SmartRecruiters |
+| Board input | Company identifier or recognized board URL |
+| SmartRecruiters | Paginated listings; full description fetched when preparing a selected job |
+| Saved sources | Refresh multiple company boards; optional refresh every 15 minutes while the app is open |
+| Job selection | Title/location/company filter and skill keyword overlap; user checks eligibility/sponsorship |
+| Documents | Profile-derived PDF/text resume and cover letter; matched skills listed first |
+| Browser forms | Exact labeled text fields, native selects, visible/hidden resume uploads and multi-step Next/Continue |
+| Automatic submission | Opt-in on recognized Lever/Greenhouse hosts when required native controls are resolved |
+| Ashby / SmartRecruiters applications | Import support plus assisted browser completion; dedicated unattended application adapters are not provided |
+| Other portals | Manually add URL; exact autofill and human completion |
+| Account setup | Generate or save a password in the OS vault; fill login/signup fields on an explicitly approved origin |
+| Account registration | User reviews terms and submits registration in the browser; account creation is not independently automated |
+| Email verification | Fetch and fill one unique, fresh six-digit code from an explicitly approved sender for the current origin |
+| CAPTCHA / SMS / authenticator | User completes the challenge in the same browser and resumes; no bypass |
+| Email tracking | Gmail OAuth, IMAP app password, or .eml import; optional five-minute sync while open |
+| Follow-up | Editable draft and explicit Send confirmation; OAuth sending requires send permission |
+| Submission history | Receipt JSON, timestamps, page text and conservative positive-confirmation detection |
+| Duplicate protection | Unique job URL, atomic queue claims, interrupted-session recovery; submitted/uncertain jobs are not automatically retried |
+| Export | CSV with spreadsheet formula protection |
+| LLM / scheduled auto-apply | Not included; feed refresh never triggers applications |
 
 ## First use
 
-**Profile:** enter factual text for education, work and projects. Skills are comma-separated. Exact screening answers are a JSON object, for example `{"Do you need visa sponsorship?": "Yes"}`. Answers match the actual label exactly after whitespace/case normalization; unrelated questions remain unanswered. Do not put passwords in the profile.
+1. **Profile:** enter only factual education, experience, projects and skills. Skills are comma-separated. Import profile JSON if preferred; `profile.example.json` shows the format. Existing PDF resume parsing is not implemented.
+2. **Exact answers:** a JSON object maps actual question labels to verified answers, such as `{"Do you need sponsorship?": "Yes"}`. Similar questions are not treated as equivalent. Work authorization, consent, demographic answers and unknown qualifications are not guessed.
+3. **Jobs:** choose a provider and company identifier/board URL. Imports do not apply for anything. Double-click a job to read its URL, description, status and notes. Keyword overlap is not proof of eligibility.
+4. **Saved sources:** use one line per board: `Greenhouse | databricks | global`, `Lever | palantir | global`, `Ashby | ramp | global`, or your chosen SmartRecruiters identifier. Save before refreshing. Recurring imports stop when the app closes.
+5. **Prepare PDFs:** review the generated documents before automatic submission. This version uses extractive templates, not an LLM.
+6. **Start selected:** review mode is the default. Complete unknown controls and verification in Chromium, then Resume. The updated worker re-evaluates the current page after each manual step instead of immediately declaring the application finished.
+7. **Uncertain:** check portal/email before resetting a job. A text/DOM confirmation heuristic can miss a valid submission. It does not prove employer review or deduplicate different URLs for the same opening.
 
-**Jobs:** enter the company's board identifier (the company segment of its public Greenhouse/Lever board URL), choose provider/region, and import. Filter the results. Double-click a row to see its URL, description, status and notes. You can add an HTTPS application URL manually.
+## Accounts and verification
 
-**Documents:** select a job and click Prepare PDFs. Review these before automatic submission. The generated resume includes only text you supplied. It does not read your existing PDF resume; paste verified content into Profile or import profile JSON.
+Select a job and open **Account tools**. Confirm the exact portal URL and your email, then generate a password for a new account or save an existing password. Passwords are stored by the OS keyring, not SQLite. While an application is paused, **Fill saved account** fills account email/password in the top frame on that exact HTTPS origin. It never fills third-party frames or submits registration automatically. Review the site and its terms yourself.
 
-**Applications:** select one or more jobs and click Start selected. Review mode is the default. Complete account creation, verification and custom controls in the visible browser. You may submit there yourself, then click Resume. Optional automatic submission attempts only recognized hosts and resolved forms. Complex portals will need you. Stop closes the session after the current browser operation returns.
+Some shared ATS hosts keep separate accounts for different employers. This release stores one account per origin; use browser entry directly if employer accounts differ. Do not replace a saved password unless intended.
 
-**Receipts:** submitted means a positive confirmation phrase appeared on a changed page without visible editable fields. This conservative heuristic can miss valid submissions; check uncertain applications in the portal or email before resetting them. It cannot prove employer review or prevent duplicates across different URLs for the same opening.
+For email codes, configure the exact verification sender in Account tools and connect your mailbox. On the portal's code screen, click **Fetch email code** while paused. The helper requires the configured sender, your recipient address, a fresh message after the queue began, explicit verification language and one unambiguous six-digit code. It fills only a supported OTP field and does not submit it. Split-digit widgets, links, stale/ambiguous codes and SMS/authenticator approvals use manual entry. Codes and passwords are never written to activity logs.
 
-**Email:** optional Gmail/Outlook IMAP requires IMAP enabled and an app password supported by your account. Passwords are stored through the operating-system keyring. Some accounts require OAuth and will not work with this release's IMAP login. Use .eml import instead. Sync reads the latest 100 messages without marking them read. Message-stage classification is advisory. Company matching only links a message when exactly one stored job matches; ambiguous messages remain unlinked. Follow-ups need an explicit recipient and Send confirmation.
+## Email
 
-## Data and security
+**Gmail OAuth:** see [Gmail setup](docs/GMAIL_SETUP.md). OAuth needs your own Google Desktop app client registration; no shared OAuth credentials are distributed. Import client JSON, connect in your normal browser and grant read access. Send permission is optional. Tokens/configuration are stored in the OS vault. The verified Gmail account address is saved automatically.
 
-On Windows data lives under `%LOCALAPPDATA%\ApplyPilot`. App binaries live separately under `%LOCALAPPDATA%\Programs\ApplyPilot`. Uninstalling the app leaves personal records for recovery; delete the data folder yourself if you want to erase them.
+**IMAP:** select Gmail or Outlook, enter the address and save a provider-generated app password. The provider must support that login method. OAuth-only accounts can use Gmail OAuth or .eml import where applicable. Outlook OAuth is not implemented.
 
-- No telemetry, hosted backend, public profile upload, web listener or required AI vendor.
-- Email app password uses OS keyring, never SQLite. Normal account passwords are entered directly in the browser.
-- Profile, email bodies, receipts and browser session files are sensitive local data, not encrypted database records. Protect your Windows account and disk. Never commit the data directory.
-- Browser cookies can grant account access. Do not share the browser-session folder. Session persistence is not a password vault.
-- Imported pages/email are treated as data, never AI instructions or executable commands. Native browser sandbox remains enabled.
-- Work authorization, consent, demographic and sensitive questions are not guessed. Checkboxes/radios remain for the user.
-- Submitted/uncertain jobs cannot be automatically retried. Restart converts interrupted running jobs to uncertain.
-- The agent navigates user-chosen URLs in a browser. Inspect unfamiliar employers and destinations before supplying personal information.
-- Automatic submission is opt-in. Clicking Start with it enabled authorizes submissions for the selected jobs. Email never sends automatically.
+Sync reads recent inbox messages without marking them read. HTML-only messages are supported. Interview/rejection classification is advisory; ambiguous company matching stays unlinked. Optional five-minute sync runs only while the app is open and reports new possible interview/action messages in the dashboard. It does not send replies automatically.
 
-## Run from source
+## Development and checks
 
-Requires Python 3.12 and a desktop display.
+Python 3.12 and a desktop display are needed when running source. Windows installer users skip these commands.
 
 ```sh
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # Linux/macOS: source .venv/bin/activate
-pip install -r requirements.txt
-python -m playwright install chromium
-python launcher.py
-```
-
-Linux development also needs Tk and Chromium system dependencies. End users of the Windows installer do not need these steps.
-
-## Test and build
-
-```sh
 pip install -r requirements.txt -r requirements-dev.txt
 python -m playwright install chromium
 python -m pytest -q
+python launcher.py
 ```
 
-The GitHub workflow runs core/browser tests on Linux, then builds on Windows with PyInstaller and Inno Setup, silently installs and launches the resulting app, and publishes an installer only after those steps pass. CI fixtures use synthetic data; no real applications are submitted. Windows and live-employer validation must be reported separately from fixture tests.
+Linux development also needs Tk and Chromium system dependencies. [GitHub Actions](https://github.com/Sunnyvulli/auto-job-applier/actions) tests Linux/browser fixtures, builds a Windows installer, installs it, exercises the dashboard/PDF/bundled browser/OAuth imports/Windows credential vault, and publishes only after success. Superseded builds do not publish a release. See [validation](VALIDATION.md) and [security review](SECURITY.md).
 
-The repository's workflow is intended for public GitHub-hosted standard runners. No paid services are configured. GitHub account policies/quotas can still prevent builds; no deployment or billing service is provisioned. GitHub Pages can host static pages, not this browser agent.
+The app runs on your PC. GitHub hosts source and installer downloads; GitHub Pages cannot run this browser agent. Builds use standard public hosted runners and remain subject to GitHub account policies/availability. No paid infrastructure is provisioned.
 
-## Scope and roadmap
-
-Next improvements: employer-specific adapters verified against live forms, OAuth email connection, robust DOM confirmation adapters, account creation workflows, optional local-model writing, notifications outside the running app, and scheduled imports. These are not claimed as completed capabilities.
-
-A personal application assistant cannot guarantee access to every portal, CAPTCHA completion, submission success or employment. This release emphasizes visible progress and recoverable failures.
-
-## Sources
-
-- Greenhouse public Job Board API: https://docs.greenhouse.io/job-board
-- Lever Postings API: https://github.com/lever/postings-api
-- Playwright browser packaging: https://playwright.dev/python/docs/browsers
-- PyInstaller Windows builds: https://pyinstaller.org/en/stable/
-
-MIT licensed. Dependencies retain their respective licenses; Chromium licensing files are distributed with the browser bundle.
+MIT licensed. Dependencies retain their respective licenses. Chromium license files are bundled with its distribution.

@@ -87,3 +87,13 @@ def test_import_lever_eu(monkeypatch):
     monkeypatch.setattr('applypilot.core.fetch_json',fetch)
     assert import_board('Lever','acme','eu')[0]['location']=='Berlin'
     assert captured[0].startswith('https://api.eu.lever.co/')
+
+def test_large_board_response_not_truncated(monkeypatch):
+    from applypilot.core import fetch_json
+    payload=b'{"description":"'+b'x'*8_000_001+b'"}'
+    class Response:
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def read(self,n):return payload[:n]
+    monkeypatch.setattr('applypilot.core.urlopen',lambda *a,**k:Response())
+    assert len(fetch_json('https://example.com')['description'])==8_000_001

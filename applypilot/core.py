@@ -82,7 +82,10 @@ class Store:
 def fetch_json(url):
     req = Request(url, headers={'User-Agent':'ApplyPilot/0.1 personal job assistant'})
     with urlopen(req, timeout=25) as r:
-        return json.loads(r.read(8_000_000))
+        limit=32 * 1024 * 1024
+        payload=r.read(limit+1)
+        if len(payload)>limit: raise ValueError('Company board exceeds the 32 MiB import limit. Add selected job URLs manually.')
+        return json.loads(payload)
 
 def import_board(provider, company, region='global'):
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', company):

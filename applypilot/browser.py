@@ -85,7 +85,7 @@ class BrowserWorker:
             from playwright.sync_api import sync_playwright
             profile=self.store.setting('profile',{})
             with sync_playwright() as p:
-                context=p.chromium.launch_persistent_context(str(self.store.folder/'browser-session'),headless=False,accept_downloads=False)
+                context=p.chromium.launch_persistent_context(str(self.store.folder/'browser-session'),headless=False,accept_downloads=False,chromium_sandbox=True)
                 page=context.pages[0] if context.pages else context.new_page()
                 for jid in ids:
                     if self.stop_event.is_set(): break

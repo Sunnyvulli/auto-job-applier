@@ -198,7 +198,13 @@ class App:
         except queue.Empty:pass
         self.root.after(300,self.pump)
     def close(self):
-        self.worker.stop();self.root.destroy()
+        self.worker.stop()
+        def finish():
+            if self.worker.thread and self.worker.thread.is_alive():
+                self.status.set('Closing the browser session safely…')
+                self.root.after(200,finish)
+            else:self.root.destroy()
+        finish()
 
 def main():
     from .instance import acquire

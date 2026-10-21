@@ -41,11 +41,13 @@ jobs:
         run: |
           $installer = Start-Process installer-output\ApplyPilot-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait
           if ($installer.ExitCode -ne 0) { throw 'Installer failed' }
-          $p = Start-Process "$env:LOCALAPPDATA\Programs\ApplyPilot\ApplyPilot.exe" -PassThru
-          Start-Sleep -Seconds 12
-          $p.Refresh()
-          if ($p.HasExited) { throw 'App exited during startup' }
-          Stop-Process -Id $p.Id
+          $report = "$env:RUNNER_TEMP\applypilot-smoke.json"
+          $p = Start-Process "$env:LOCALAPPDATA\Programs\ApplyPilot\ApplyPilot.exe" -ArgumentList '--smoke-test', $report -PassThru
+          if (-not $p.WaitForExit(120000)) { Stop-Process -Id $p.Id; throw 'Installed smoke test timed out' }
+          if ($p.ExitCode -ne 0 -or -not (Test-Path $report)) { throw 'Installed smoke test failed' }
+          $result = Get-Content $report -Raw | ConvertFrom-Json
+          if (-not $result.ok) { throw ($result | ConvertTo-Json) }
+          Write-Output ($result | ConvertTo-Json)
       - uses: actions/upload-artifact@v4
         with:
           name: ApplyPilot-Windows-installer

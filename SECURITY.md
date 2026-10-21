@@ -35,3 +35,11 @@ No live accounts, real mail credentials, employer applications or authentication
 - Recurring source/mail checks are opt-in and run only while the application is open. They do not authorize automatic applications or replies.
 
 New account helpers and email-code handling have fixture coverage. Real registration, live user OAuth consent and real mailbox-code handling require user-side validation; no such live success is claimed.
+
+## 0.3 additions
+
+Resume import reads local PDF/DOCX/text with file/page limits and requires human review. It does not execute macros or request an external AI service. The original PDF is copied only on explicit use of that option. Application documents remain factual templates or that approved original file.
+
+Cached documents are keyed by profile/job/template/source fingerprints and verified by file hashes. Bulk inserts validate URLs before beginning the transaction. WAL and pagination change performance, not application authorization. Preference plans exclude running, uncertain and submitted jobs. Automatic submission still requires the user's saved opt-in.
+
+Lite selects an installed Edge/Chrome browser. Browser profiles remain separate per engine. Full carries a tested pinned browser; choosing a system browser allows that browser's normal updates. No compatibility with arbitrary browser versions or legacy OSes is guaranteed. HTTP connection pooling is restricted to GET feed requests with bounded retries; it does not retry application POSTs.

@@ -120,6 +120,7 @@ class BrowserWorker:
         for step in range(25):
             if self.stop_event.is_set():return 'uncertain'
             if self.confirmed(page,baseline):return 'submitted'
+            profile=self.store.setting('profile',profile)
             missing=fill_page(page,profile,dest)
             passwords=page.locator('input[type=password]:visible').count()
             captcha=page.locator('iframe[src*="captcha"],iframe[title*="challenge" i],.g-recaptcha,.h-captcha').count()
@@ -160,7 +161,8 @@ class BrowserWorker:
             from playwright.sync_api import sync_playwright
             profile=self.store.setting('profile',{})
             with sync_playwright() as p:
-                context=p.chromium.launch_persistent_context(str(self.store.folder/'browser-session'),headless=False,accept_downloads=False,chromium_sandbox=True)
+                from .system import launch_context
+                context=launch_context(p.chromium,self.store.folder,self.store.setting('preferences',{}).get('browser','auto'))
                 page=context.pages[0] if context.pages else context.new_page();self.page=page
                 for jid in ids:
                     if self.stop_event.is_set():break

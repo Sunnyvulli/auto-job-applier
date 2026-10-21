@@ -10,6 +10,7 @@ def smoke_test(report):
     import tempfile
     import tkinter as tk
     from applypilot.desktop import App
+    from applypilot.system import launch_context
     from applypilot.core import documents
     from playwright.sync_api import sync_playwright
     checks=[]
@@ -23,9 +24,16 @@ def smoke_test(report):
             jid=app.store.add(dict(url='https://jobs.lever.co/test/synthetic/apply',company='Synthetic',title='Test role'))
             app.refresh();assert len(app.tree.get_children())==1;checks.append('profile and dashboard')
             dest=documents(app.store,app.store.setting('profile'),app.store.job(jid));assert (dest/'resume.pdf').stat().st_size>500;checks.append('PDF generation')
+            for view in ('Overview','Profile','Job library','Inbox','Sources','Preferences','Activity','Diagnostics'):
+                app.show_page(view);root.update()
+            app.show_page('Overview');root.geometry('1024x700');root.update();checks.append('all views and small window layout')
+            from applypilot.productivity import plan_queue
+            app.store.save_setting('preferences',{'titles':'Test','min_skills':0,'queue_limit':5})
+            assert plan_queue(app.store,app.store.setting('profile'),app.store.setting('preferences'))==[jid]
+            checks.append('preference queue')
             with sync_playwright() as p:
-                browser=p.chromium.launch(headless=True,chromium_sandbox=True)
-                page=browser.new_page();page.set_content('<h1>Bundled Chromium works</h1>');assert page.locator('h1').inner_text()=='Bundled Chromium works';browser.close()
+                browser=launch_context(p.chromium,folder,headless=True)
+                page=browser.new_page();page.set_content('<h1>Application browser works</h1>');assert page.locator('h1').inner_text()=='Application browser works';browser.close()
             checks.append('bundled Chromium launch')
             from google_auth_oauthlib.flow import InstalledAppFlow
             checks.append('OAuth library import')
@@ -51,5 +59,10 @@ def smoke_test(report):
 if __name__=='__main__':
     if len(sys.argv)==3 and sys.argv[1]=='--smoke-test':
         sys.exit(smoke_test(sys.argv[2]))
+    if sys.platform=='win32':
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:pass
     from applypilot.desktop import main
     main()

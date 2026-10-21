@@ -1,0 +1,13 @@
+{
+  "environment": "Linux development container; synthetic records, not laptop measurements",
+  "jobs": 10000,
+  "single_insert_1000_seconds": 1.5567,
+  "bulk_insert_1000_seconds": 0.0224,
+  "bulk_speedup_1000": 69.65,
+  "bulk_insert_10000_seconds": 0.1945,
+  "page_100_rows_median_ms": 0.634,
+  "queue_scan_10000_seconds": 0.0989,
+  "queue_size": 10,
+  "document_first_seconds": 0.0766,
+  "document_cached_seconds": 0.0005
+}

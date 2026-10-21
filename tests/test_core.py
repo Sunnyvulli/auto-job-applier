@@ -94,6 +94,10 @@ def test_large_board_response_not_truncated(monkeypatch):
     class Response:
         def __enter__(self):return self
         def __exit__(self,*args):pass
-        def read(self,n):return payload[:n]
-    monkeypatch.setattr('applypilot.core.urlopen',lambda *a,**k:Response())
+        def raise_for_status(self):pass
+        def iter_content(self,chunk_size):
+            for i in range(0,len(payload),chunk_size):yield payload[i:i+chunk_size]
+    class Session:
+        def get(self,*args,**kwargs):return Response()
+    monkeypatch.setattr('applypilot.core._http_session',Session)
     assert len(fetch_json('https://example.com')['description'])==8_000_001

@@ -32,3 +32,13 @@ On 2026-10-21, the adapter parsed 897 Databricks listings through Greenhouse and
 - Real employer application submission, real signup, live user Gmail OAuth consent and real inbox credentials are still not validated by fixtures.
 
 0.2 local result: **51 tests passed** on Linux/Python 3.12. Read-only SmartRecruiters BoschGroup import completed with 5,099 valid listings (the live count changed from the initial API preflight). Ashby Ramp returned 170. No application or account registration was submitted.
+
+## 0.3 development
+
+- Replaced full-table redraws with indexed pagination, debounce and incremental rows; added bulk transactions, WAL, batched candidate scans, bounded parallel source imports and HTTP session pooling.
+- Added native dashboard/navigation, light/dark styling, screen-size adjustment, scrollable pages, preference queues, PDF/DOCX/text resume import, original-PDF preservation, a reusable-answer editor and verified document caching.
+- Local result: 59 core/browser/productivity tests passed; one desktop test was skipped without a display, then passed separately under a virtual display (60 distinct passing checks across both runs).
+- Desktop interaction test exercises profile/answers/preferences, source add/remove/deduplication, pagination, low resource pages, all views at 1240×820 / 1024×700 / 960×640 and theme switching. Development screenshots used synthetic data and were visually inspected; these are not Windows hardware screenshots.
+- Synthetic benchmark: 10,000-job bulk insert 0.1945 s; 100-row page median 0.634 ms; queue scan 0.0989 s. The 1,000-record bulk path was 69.65× faster than individual transactions in this Linux container. These figures do not predict network speed, portal completion or physical laptop performance.
+- Installer pipeline builds Full and Lite, tests both on Windows Server 2022 and 2025, and separately attempts Windows 11 ARM emulation. Exact job results remain authoritative; ARM is experimental and may fail without blocking x64 publication.
+- Live employer submissions, unattended account registration, real user OAuth consent, CAPTCHA completion and legacy Windows compatibility remain unvalidated.

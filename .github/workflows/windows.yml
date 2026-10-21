@@ -1,4 +1,4 @@
-name: Test and build Windows installer
+name: Test and build Windows installers
 on:
   push:
     branches: [main]
@@ -16,11 +16,15 @@ jobs:
       - run: pip install -r requirements.txt -r requirements-dev.txt
       - run: python -m playwright install --with-deps chromium
       - run: python -m pytest -q
+      - name: Desktop interaction checks
+        run: xvfb-run -a python -m pytest tests/test_desktop.py -q
   windows:
     needs: test
-    runs-on: windows-latest
-    permissions:
-      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-latest]
+    runs-on: ${{ matrix.os }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}\browsers
     steps:
@@ -29,35 +33,66 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt -r requirements-dev.txt pyinstaller==6.16.0
-      - run: python -m playwright install chromium
-      - run: python -m pytest tests/test_core.py -q
-      - name: Freeze app with Python and Chromium
+      - run: python -m playwright install --no-shell chromium
+      - run: python -m pytest tests/test_core.py tests/test_productivity.py tests/test_desktop.py -q
+      - name: Freeze app with bundled browser
         run: python -m PyInstaller --noconfirm --clean --windowed --name ApplyPilot --collect-all playwright --collect-all reportlab --hidden-import keyring.backends.Windows --copy-metadata google-auth --copy-metadata google-auth-oauthlib --copy-metadata requests-oauthlib --add-data "browsers;browsers" launcher.py
-      - name: Compile installer
-        shell: pwsh
-        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\installer.iss'
-      - name: Smoke test installed app
+      - name: Stage Lite edition
+        shell: python
+        run: |
+          import shutil
+          shutil.copytree('dist/ApplyPilot','dist/ApplyPilotLite',ignore=shutil.ignore_patterns('browsers'))
+      - name: Compile Full and Lite installers
         shell: pwsh
         run: |
-          $installer = Start-Process installer-output\ApplyPilot-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait
-          if ($installer.ExitCode -ne 0) { throw 'Installer failed' }
-          $report = "$env:RUNNER_TEMP\applypilot-smoke.json"
-          $p = Start-Process "$env:LOCALAPPDATA\Programs\ApplyPilot\ApplyPilot.exe" -ArgumentList '--smoke-test', $report -PassThru
-          if (-not $p.WaitForExit(120000)) { Stop-Process -Id $p.Id; throw 'Installed smoke test timed out' }
-          if ($p.ExitCode -ne 0 -or -not (Test-Path $report)) { throw 'Installed smoke test failed' }
-          $result = Get-Content $report -Raw | ConvertFrom-Json
-          if (-not $result.ok) { throw ($result | ConvertTo-Json) }
-          Write-Output ($result | ConvertTo-Json)
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DVariant=Full packaging\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Full installer compilation failed' }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DVariant=Lite packaging\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Lite installer compilation failed' }
+      - name: Test installed Full edition
+        shell: pwsh
+        run: ./packaging/smoke.ps1 -Installer installer-output/ApplyPilot-Full-Setup.exe -Name full
+      - name: Test installed Lite edition
+        shell: pwsh
+        run: ./packaging/smoke.ps1 -Installer installer-output/ApplyPilot-Lite-Setup.exe -Name lite
       - uses: actions/upload-artifact@v4
         with:
-          name: ApplyPilot-Windows-installer
-          path: installer-output/ApplyPilot-Setup.exe
-      - name: Publish installer
+          name: ApplyPilot-Windows-${{ matrix.os }}
+          path: installer-output/*.exe
+  arm:
+    needs: windows
+    runs-on: windows-11-arm
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ApplyPilot-Windows-windows-2022
+          path: installer-output
+      - name: Test Full x64 emulation on Windows 11 ARM
+        shell: pwsh
+        run: ./packaging/smoke.ps1 -Installer installer-output/ApplyPilot-Full-Setup.exe -Name arm-full
+      - name: Test Lite x64 emulation on Windows 11 ARM
+        shell: pwsh
+        run: ./packaging/smoke.ps1 -Installer installer-output/ApplyPilot-Lite-Setup.exe -Name arm-lite
+  release:
+    needs: [test, windows, arm]
+    if: always() && needs.test.result == 'success' && needs.windows.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ApplyPilot-Windows-windows-2022
+          path: installer-output
+      - name: Publish installers and checksums
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: pwsh
+          GH_REPO: ${{ github.repository }}
         run: |
-          $tag = "build-${{ github.run_number }}"
-          $head = gh api "repos/${{ github.repository }}/commits/main" --jq .sha
-          if ($head -ne "${{ github.sha }}") { Write-Output "Skipping superseded build release"; exit 0 }
-          gh release create $tag installer-output/ApplyPilot-Setup.exe --target "${{ github.sha }}" --title "ApplyPilot 0.2 preview ($tag)" --notes "Free local preview with four job feeds, account helpers and optional Gmail OAuth. Bundles Python and Chromium. See README for supported features and limitations. Unsigned installer."
+          branch_head=$(gh api "repos/${{ github.repository }}/commits/main" --jq .sha)
+          if [ "$branch_head" != "${{ github.sha }}" ]; then exit 0; fi
+          cd installer-output
+          sha256sum *.exe > SHA256SUMS.txt
+          gh release create "build-${{ github.run_number }}" *.exe SHA256SUMS.txt --target "${{ github.sha }}" --title "ApplyPilot 0.3 preview" --notes "Dashboard, resume import, preference queues, bulk imports and Full/Lite installers. Both editions tested on Windows Server 2022 and 2025. ARM is experimental; check the ARM job result. See README for supported behavior and live-validation limits."

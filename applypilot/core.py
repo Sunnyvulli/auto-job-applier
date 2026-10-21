@@ -1,13 +1,15 @@
 from contextlib import contextmanager
+from functools import lru_cache
 import hashlib
 import html
 import json
 import re
 import sqlite3
+import shutil
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
-from urllib.request import Request, urlopen
 
 STATES = {'saved', 'prepared', 'running', 'needs_attention', 'submitted', 'uncertain', 'interview', 'rejected', 'closed'}
 
@@ -31,6 +33,7 @@ class Store:
         self.folder.mkdir(parents=True, exist_ok=True)
         self.db = self.folder / 'applypilot.sqlite3'
         with self.connect() as c:
+            c.execute('PRAGMA journal_mode=WAL')
             c.executescript('''
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, url TEXT UNIQUE NOT NULL,
@@ -40,6 +43,7 @@ class Store:
             CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, job_id TEXT, kind TEXT, detail TEXT, at TEXT);
             CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY, job_id TEXT, sender TEXT, subject TEXT, body TEXT, stage TEXT, at TEXT);
             ''')
+            c.executescript('CREATE INDEX IF NOT EXISTS jobs_updated ON jobs(updated DESC,id); CREATE INDEX IF NOT EXISTS jobs_status_updated ON jobs(status,updated DESC); CREATE INDEX IF NOT EXISTS messages_time ON messages(at DESC);')
             c.execute("UPDATE jobs SET status='uncertain', note='Interrupted session: check portal before retrying.' WHERE status='running'")
     @contextmanager
     def connect(self):
@@ -57,13 +61,41 @@ class Store:
     def save_setting(self, key, value):
         with self.connect() as c:
             c.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', (key, json.dumps(value)))
-    def add(self, job):
-        url = canonical_url(job['url'])
-        jid = hashlib.sha256(url.encode()).hexdigest()[:20]
+    def add(self,job):
+        self.add_many([job])
+        return hashlib.sha256(canonical_url(job['url']).encode()).hexdigest()[:20]
+    def add_many(self,jobs):
+        rows=[]
+        for job in jobs:
+            url=canonical_url(job['url'])
+            rows.append((hashlib.sha256(url.encode()).hexdigest()[:20],url,job['company'],job['title'],job.get('location',''),job.get('description',''),now()))
         with self.connect() as c:
-            c.execute('INSERT OR IGNORE INTO jobs(id,url,company,title,location,description,updated) VALUES(?,?,?,?,?,?,?)',
-                      (jid, url, job['company'], job['title'], job.get('location',''), job.get('description',''), now()))
-        return jid
+            before=c.total_changes
+            c.executemany('INSERT OR IGNORE INTO jobs(id,url,company,title,location,description,updated) VALUES(?,?,?,?,?,?,?)',rows)
+            return c.total_changes-before
+    def page(self,search='',status='',limit=100,offset=0):
+        limit=max(1,min(200,int(limit)));offset=max(0,int(offset))
+        clauses=[];params=[]
+        if search:
+            escaped=search.replace('!','!!').replace('%','!%').replace('_','!_')
+            clauses.append("(company LIKE ? ESCAPE '!' OR title LIKE ? ESCAPE '!' OR location LIKE ? ESCAPE '!')")
+            params.extend(['%'+escaped+'%']*3)
+        if status:clauses.append('status=?');params.append(status)
+        where=' WHERE '+' AND '.join(clauses) if clauses else ''
+        with self.connect() as c:
+            total=c.execute('SELECT COUNT(*) FROM jobs'+where,params).fetchone()[0]
+            # List view never loads large descriptions; detail and document views fetch them on demand.
+            rows=[dict(r) for r in c.execute('SELECT id,url,company,title,location,status,note,updated FROM jobs'+where+' ORDER BY updated DESC,id LIMIT ? OFFSET ?',params+[limit,offset])]
+        return rows,total
+    def counts(self):
+        with self.connect() as c:return {r['status']:r['n'] for r in c.execute('SELECT status,COUNT(*) n FROM jobs GROUP BY status')}
+    def candidates(self):
+        with self.connect() as c:
+            cursor=c.execute("SELECT * FROM jobs WHERE status IN ('saved','prepared') ORDER BY updated DESC,id")
+            while True:
+                rows=cursor.fetchmany(100)
+                if not rows:break
+                for row in rows:yield dict(row)
     def jobs(self):
         with self.connect() as c:
             return [dict(r) for r in c.execute('SELECT * FROM jobs ORDER BY updated DESC')]
@@ -85,12 +117,25 @@ class Store:
         with self.connect() as c:
             return [dict(r) for r in c.execute('SELECT * FROM events ORDER BY id DESC LIMIT 300')]
 
+_http_local=threading.local()
+
+def _http_session():
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    if not hasattr(_http_local,'session'):
+        session=requests.Session();session.headers['User-Agent']='ApplyPilot/0.3 personal job assistant'
+        adapter=HTTPAdapter(pool_connections=4,pool_maxsize=4,max_retries=Retry(total=2,backoff_factor=.5,status_forcelist=[429,502,503,504],allowed_methods=frozenset(['GET']),respect_retry_after_header=False))
+        session.mount('https://',adapter);_http_local.session=session
+    return _http_local.session
+
 def fetch_json(url):
-    req = Request(url, headers={'User-Agent':'ApplyPilot/0.2 personal job assistant'})
-    with urlopen(req, timeout=25) as r:
-        limit=32 * 1024 * 1024
-        payload=r.read(limit+1)
-        if len(payload)>limit: raise ValueError('Company board exceeds the 32 MiB import limit. Add selected job URLs manually.')
+    limit=32*1024*1024
+    with _http_session().get(url,timeout=(8,25),stream=True) as response:
+        response.raise_for_status();payload=bytearray()
+        for chunk in response.iter_content(chunk_size=65536):
+            payload.extend(chunk)
+            if len(payload)>limit:raise ValueError('Company board exceeds the 32 MiB import limit. Add selected job URLs manually.')
         return json.loads(payload)
 
 def import_board(provider, company, region='global'):
@@ -106,10 +151,14 @@ def import_board(provider, company, region='global'):
         return [dict(url=j['applyUrl'],company=company,title=j['text'],location=j.get('categories',{}).get('location',''),description=plain(j.get('descriptionPlain',j.get('description','')))+' '+plain(' '.join(x.get('content','') for x in j.get('lists',[])))) for j in data]
     raise ValueError('Unsupported provider')
 
+@lru_cache(maxsize=256)
+def _skill_pattern(skill):
+    return re.compile(r'(?<!\w)'+re.escape(skill.lower())+r'(?!\w)')
+
 def match(profile, job):
     text = (job['title']+' '+job.get('description','')).lower()
     skills = [s.strip() for s in profile.get('skills','').split(',') if s.strip()]
-    found = [s for s in skills if re.search(r'(?<!\w)'+re.escape(s.lower())+r'(?!\w)',text)]
+    found = [s for s in skills if _skill_pattern(s).search(text)]
     return {'overlap':len(found), 'skills':found, 'note':'Keyword overlap only; eligibility and sponsorship must be checked.'}
 
 def documents(store, profile, job):
@@ -122,6 +171,16 @@ def documents(store, profile, job):
     job=hydrate_job(store,job)
     dest = store.folder / 'documents' / job['id']
     dest.mkdir(parents=True, exist_ok=True)
+    source=store.setting('resume_pdf')
+    source_path=Path(source) if source else None
+    source_hash=hashlib.sha256(source_path.read_bytes()).hexdigest() if source_path and source_path.is_file() else None
+    fingerprint=hashlib.sha256(json.dumps({'template_version':3,'profile':profile,'job':{k:job.get(k,'') for k in ('title','company','description','url')},'source_hash':source_hash},sort_keys=True).encode()).hexdigest()
+    manifest_path=dest/'manifest.json'
+    if manifest_path.exists():
+        try:
+            previous=json.loads(manifest_path.read_text(encoding='utf-8'))
+            if previous.get('fingerprint')==fingerprint and all((dest/name).is_file() and hashlib.sha256((dest/name).read_bytes()).hexdigest()==digest for name,digest in previous.get('files',{}).items()) and len(previous.get('files',{}))==4:return dest
+        except (OSError,ValueError):pass
     evidence = match(profile, job)
     skills = evidence['skills'] + [s.strip() for s in profile.get('skills','').split(',') if s.strip() and s.strip() not in evidence['skills']]
     resume = [profile['name'], ' | '.join(profile.get(k,'') for k in ('email','phone','location') if profile.get(k)), profile.get('linkedin',''),
@@ -143,5 +202,10 @@ def documents(store, profile, job):
             blocks.extend([Paragraph(html.escape(line).replace('\n','<br/>'),style),Spacer(1,9)])
         SimpleDocTemplate(str(dest/f'{name}.pdf'),title=name,author=profile['name'],rightMargin=45,leftMargin=45,topMargin=40,bottomMargin=40).build(blocks)
         (dest/f'{name}.txt').write_text('\n\n'.join(lines),encoding='utf-8')
-    (dest/'manifest.json').write_text(json.dumps({'created':now(),'job_url':job['url'],'profile_sha256':hashlib.sha256(json.dumps(profile,sort_keys=True).encode()).hexdigest(),'mode':'extractive templates; no invented facts'},indent=2),encoding='utf-8')
+    if source_hash:
+        from pypdf import PdfReader
+        shutil.copyfile(source_path,dest/'resume.pdf')
+        (dest/'resume.txt').write_text('\n'.join(page.extract_text() or '' for page in PdfReader(source_path).pages),encoding='utf-8')
+    files={name:hashlib.sha256((dest/name).read_bytes()).hexdigest() for name in ('resume.pdf','resume.txt','cover-letter.pdf','cover-letter.txt')}
+    manifest_path.write_text(json.dumps({'created':now(),'job_url':job['url'],'profile_sha256':hashlib.sha256(json.dumps(profile,sort_keys=True).encode()).hexdigest(),'fingerprint':fingerprint,'files':files,'mode':'original PDF + factual cover letter' if source_hash else 'extractive templates; no invented facts'},indent=2),encoding='utf-8')
     return dest

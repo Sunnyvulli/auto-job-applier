@@ -1,4 +1,5 @@
 """Bounded local matching, document import and resumable queue planning."""
+import heapq
 import re
 from pathlib import Path
 from .core import match
@@ -66,6 +67,24 @@ def plan_queue(store,profile,preferences):
     ranked=[]
     for job in store.candidates():
         assessment=assess(profile,job,preferences)
-        if assessment['eligible']:ranked.append((assessment['score'],job['updated'],job['id']))
+        if assessment['eligible']:
+            heapq.heappush(ranked,(assessment['score'],job['updated'],job['id']))
+            if len(ranked)>cap:heapq.heappop(ranked)
     ranked.sort(reverse=True)
     return [item[2] for item in ranked[:cap]]
+
+
+def queue_preflight(store,ids,profile,preferences):
+    """Recheck current saved preferences and claimable status before starting."""
+    accepted=[];skipped=[];seen=set()
+    for jid in ids[:50]:
+        if jid in seen:continue
+        seen.add(jid)
+        try:job=store.job(jid)
+        except ValueError:skipped.append((jid,'Job no longer exists'));continue
+        reasons=[]
+        if job['status'] not in {'saved','prepared'}:reasons.append('Already processed or needs manual review')
+        reasons.extend(assess(profile,job,preferences)['reasons'])
+        if reasons:skipped.append((jid,'; '.join(reasons)))
+        else:accepted.append(jid)
+    return accepted,skipped

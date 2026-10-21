@@ -31,10 +31,17 @@ def smoke_test(report):
             app.store.save_setting('preferences',{'titles':'Test','min_skills':0,'queue_limit':5})
             assert plan_queue(app.store,app.store.setting('profile'),app.store.setting('preferences'))==[jid]
             checks.append('preference queue')
+            from applypilot.recovery import create_backup, restore_backup
+            from applypilot.core import Store
+            backup=create_backup(app.store,Path(folder)/'test.applypilot')
+            recovered=Store(Path(folder)/'restored');restore_backup(recovered,backup)
+            assert recovered.setting('profile')['name']=='Synthetic Test User'
+            assert recovered.job(jid)['url']==app.store.job(jid)['url']
+            checks.append('backup export and restore')
             with sync_playwright() as p:
                 browser=launch_context(p.chromium,folder,headless=True)
                 page=browser.new_page();page.set_content('<h1>Application browser works</h1>');assert page.locator('h1').inner_text()=='Application browser works';browser.close()
-            checks.append('bundled Chromium launch')
+            checks.append('application browser launch')
             from google_auth_oauthlib.flow import InstalledAppFlow
             checks.append('OAuth library import')
             from applypilot.accounts import save_account

@@ -15,7 +15,7 @@ from .browser import BrowserWorker
 from . import mail
 from .sources import PROVIDERS, board_identifier
 from . import accounts, google_mail
-from .productivity import resume_text, extract_profile, plan_queue, assess
+from .productivity import resume_text, extract_profile, plan_queue, assess, queue_preflight
 from .system import capabilities
 from .theme import apply_style, UI_FONT, CODE_FONT
 
@@ -31,7 +31,7 @@ class App:
         self.busy_count=0;self.offset=0;self.total_jobs=0;self.filter_timer=None
         self.queued_ids=self.store.setting('planned_queue',[]);self.pages={};self.nav={};self.current_page=''
         self.status=tk.StringVar(value='Welcome. Import your resume once, then set your job preferences.')
-        root.title('ApplyPilot 0.3');root.geometry(f'{min(1240,root.winfo_screenwidth()-60)}x{min(820,root.winfo_screenheight()-90)}');root.minsize(min(960,root.winfo_screenwidth()-40),min(640,root.winfo_screenheight()-60))
+        root.title('ApplyPilot 0.4');root.geometry(f'{min(1240,root.winfo_screenwidth()-60)}x{min(820,root.winfo_screenheight()-90)}');root.minsize(min(960,root.winfo_screenwidth()-40),min(640,root.winfo_screenheight()-60))
         self.colors=apply_style(root,self.store.setting('theme','light'))
         root.grid_rowconfigure(0,weight=1);root.grid_columnconfigure(1,weight=1)
         c=self.colors
@@ -43,7 +43,7 @@ class App:
         self.nav_area=tk.Frame(self.sidebar,bg=c['nav']);self.nav_area.pack(fill='x')
         footer=tk.Frame(self.sidebar,bg=c['nav']);footer.pack(side='bottom',fill='x',padx=20,pady=22)
         tk.Label(footer,text='LOCAL  /  PRIVATE  /  FREE',font=(UI_FONT,8,'bold'),bg=c['nav'],fg=c['navtext']).pack(anchor='w')
-        tk.Label(footer,text='Version 0.3 preview',font=(UI_FONT,9),bg=c['nav'],fg=c['navtext']).pack(anchor='w',pady=(6,0))
+        tk.Label(footer,text='Version 0.4 preview',font=(UI_FONT,9),bg=c['nav'],fg=c['navtext']).pack(anchor='w',pady=(6,0))
         shell=ttk.Frame(root,padding=(24,18,24,12));shell.grid(row=0,column=1,sticky='nsew');shell.grid_rowconfigure(1,weight=1);shell.grid_columnconfigure(0,weight=1)
         top=ttk.Frame(shell);top.grid(row=0,column=0,sticky='ew',pady=(0,18))
         self.page_title=tk.StringVar(value='Overview');ttk.Label(top,textvariable=self.page_title,style='Section.TLabel').pack(side='left')
@@ -53,7 +53,7 @@ class App:
         bottom=ttk.Frame(shell);bottom.grid(row=2,column=0,sticky='ew',pady=(12,0));bottom.grid_columnconfigure(0,weight=1)
         ttk.Label(bottom,textvariable=self.status,wraplength=700,style='Muted.TLabel').grid(row=0,column=0,sticky='w')
         self.progress=ttk.Progressbar(bottom,mode='indeterminate',length=100);self.progress.grid(row=0,column=1,padx=(10,0));self.progress.grid_remove()
-        self.recolor_widgets();self.refresh();self.show_page('Overview');self.pump();root.after(900000,self.scheduled_refresh);root.after(300000,self.scheduled_mail);root.protocol('WM_DELETE_WINDOW',self.close)
+        self.recolor_widgets();self.refresh();self.show_page('Overview');self.pump();root.after(900000,self.scheduled_refresh);root.after(300000,self.scheduled_mail);root.protocol('WM_DELETE_WINDOW',self.close);root.after(1500,self.start_daily_backup)
 
     def tab(self,name):
         name=re.sub(r'^\d\s+','',name)
@@ -465,7 +465,7 @@ class App:
                     self.queued_ids=event['ids'];self.store.save_setting('planned_queue',self.queued_ids);self.render_queue()
                     self.status.set(f'{len(self.queued_ids)} jobs matched your preferences. Verify eligibility before applying.')
                     if event['type']=='start_planned' and self.queued_ids:
-                        try:self.worker.start(self.queued_ids,self.auto.get())
+                        try:self.start_reviewed_queue()
                         except Exception as e:self.status.set(str(e))
                 changed=True;continue
             text=str(event);self.status.set(text);self.log.insert('end',text+'\n');self.log.see('end');changed=True
@@ -515,6 +515,7 @@ class App:
         ttk.Button(helpers,text='Fill account',command=lambda:self.guard(lambda:self.worker.request('account'))).pack(side='left',padx=5)
         ttk.Button(helpers,text='Fetch email code',command=lambda:self.guard(lambda:self.worker.request('otp'))).pack(side='left')
         ttk.Button(helpers,text='Stop',command=self.worker.stop).pack(side='right')
+        ttk.Button(helpers,text='Remove selected',command=lambda:self.guard(self.remove_from_queue)).pack(side='right',padx=5)
         ttk.Button(helpers,text='Documents',command=lambda:self.open_path(self.store.folder/'documents')).pack(side='right',padx=6)
         ttk.Checkbutton(t,text='Submit supported forms automatically using my saved answers',variable=self.auto,command=lambda:self.store.save_setting('auto_submit',self.auto.get())).pack(anchor='w')
         ttk.Label(t,text='First time? Import your resume in Profile, save Preferences, then add company Sources.',style='Muted.TLabel',wraplength=700).pack(anchor='w',pady=(7,0))
@@ -535,11 +536,19 @@ class App:
         if not preferences.get('titles','').strip():
             self.show_page('Preferences');raise ValueError('Save target role keywords before building a queue.')
         if start and self.queued_ids:
-            pending=[jid for jid in self.queued_ids if self.store.job(jid)['status'] in {'saved','prepared'}]
-            if pending:
-                self.worker.start(pending,self.auto.get());self.status.set('Starting your reviewed queue…');return
+            self.start_reviewed_queue();return
         def work():return {'type':'start_planned' if start else 'planned','ids':plan_queue(self.store,profile,preferences)}
         self.background(work)
+    def start_reviewed_queue(self):
+        valid,skipped=queue_preflight(self.store,self.queued_ids,self.store.setting('profile',{}),self.store.setting('preferences',{}))
+        self.queued_ids=valid;self.store.save_setting('planned_queue',valid);self.render_queue()
+        if skipped:self.log.insert('end',f'Queue preflight excluded {len(skipped)} jobs after checking current status and preferences.\n')
+        if not valid:raise ValueError('No jobs remain after checking current preferences and application status. Build a new queue.')
+        self.worker.start(valid,self.auto.get());self.status.set(f'Starting {len(valid)} reviewed jobs; {len(skipped)} excluded by preflight.')
+    def remove_from_queue(self):
+        if self.worker.thread and self.worker.thread.is_alive():raise ValueError('Stop the browser queue before editing it.')
+        removed=set(self.queue_tree.selection());self.queued_ids=[jid for jid in self.queued_ids if jid not in removed]
+        self.store.save_setting('planned_queue',self.queued_ids);self.render_queue();self.refresh()
     def preferences_tab(self):
         t=self.tab('Preferences')
         ttk.Label(t,text='Make your search yours.',style='Title.TLabel').pack(anchor='w')
@@ -593,7 +602,28 @@ class App:
         ttk.Label(t,text='A clear view of your setup.',style='Title.TLabel').pack(anchor='w')
         ttk.Label(t,text='No remote diagnostics or telemetry. This report is generated locally.',style='Muted.TLabel').pack(anchor='w',pady=(5,18))
         self.diagnostic_text=tk.Text(t,height=18,wrap='word',font=(CODE_FONT,11),relief='flat',padx=18,pady=18);self.diagnostic_text.pack(fill='both',expand=True)
-        ttk.Button(t,text='Refresh diagnostics',command=self.update_diagnostics).pack(anchor='w',pady=12);self.update_diagnostics()
+        actions=ttk.Frame(t);actions.pack(fill='x',pady=12)
+        ttk.Button(actions,text='Refresh diagnostics',command=self.update_diagnostics).pack(side='left')
+        ttk.Button(actions,text='Export backup',command=lambda:self.guard(self.export_backup)).pack(side='left',padx=8)
+        ttk.Button(actions,text='Restore backup',command=lambda:self.guard(self.restore_data)).pack(side='left')
+        ttk.Label(t,text='Daily local backups keep five days. Exports include profile, history, inbox messages and original resume. Passwords, browser sessions, OAuth tokens and generated documents are excluded. Backups are not encrypted.',wraplength=700,style='Muted.TLabel').pack(anchor='w')
+        self.update_diagnostics()
+    def start_daily_backup(self):
+        from .recovery import daily_backup
+        self.background(lambda:daily_backup(self.store))
+    def export_backup(self):
+        from .recovery import create_backup
+        path=filedialog.asksaveasfilename(defaultextension='.applypilot',filetypes=[('ApplyPilot backup','*.applypilot')])
+        if path:self.background(lambda:'Backup saved: '+str(create_backup(self.store,path)))
+    def restore_data(self):
+        from .recovery import restore_backup
+        if self.busy_count or (self.worker.thread and self.worker.thread.is_alive()):raise ValueError('Wait for background tasks and stop the browser before restoring.')
+        path=filedialog.askopenfilename(filetypes=[('ApplyPilot backup','*.applypilot')])
+        if not path:return
+        if not messagebox.askyesno('Replace local workspace?', 'Restore replaces your current profile, job history and inbox data. A recovery backup is saved first. The app closes after restore; reopen it and reconnect email/accounts. Continue?'):return
+        if self.busy_count or (self.worker.thread and self.worker.thread.is_alive()):raise ValueError('A task started while the dialog was open. Wait for it to finish before restoring.')
+        safety=restore_backup(self.store,path)
+        messagebox.showinfo('Restore complete','Your data was restored. Reopen ApplyPilot. Previous workspace backup: '+str(safety));self.root.destroy()
     def update_diagnostics(self):
         data=capabilities(self.store.folder);data['jobs']=sum(self.store.counts().values());data['saved_sources']=len(self.store.setting('boards',[]));data['email_configured']=bool(self.store.setting('mail',{}).get('address'))
         self.diagnostic_text.configure(state='normal');self.diagnostic_text.delete('1.0','end');self.diagnostic_text.insert('1.0',json.dumps(data,indent=2));self.diagnostic_text.configure(state='disabled')

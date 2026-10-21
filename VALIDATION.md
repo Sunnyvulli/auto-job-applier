@@ -1,6 +1,6 @@
 # Validation record
 
-## Local verification
+## 0.1 local verification
 
 - 27 automated checks passed on Linux/Python 3.12.
 - Chromium tests exercised real DOM filling, exact selects, sensitive consent handoff and correct file upload selection.
@@ -9,7 +9,7 @@
 - Process instance lock tested for exclusion and re-acquisition.
 - Python compilation check passed.
 
-## Separate checks
+## 0.1 separate checks
 
 Windows installer building, installation and GUI startup run in GitHub Actions. Their authoritative result is the linked Actions run and published installer, not these local results. Linux GUI startup could not be checked in the local environment because it has no display server.
 
@@ -42,3 +42,12 @@ On 2026-10-21, the adapter parsed 897 Databricks listings through Greenhouse and
 - Synthetic benchmark: 10,000-job bulk insert 0.1945 s; 100-row page median 0.634 ms; queue scan 0.0989 s. The 1,000-record bulk path was 69.65× faster than individual transactions in this Linux container. These figures do not predict network speed, portal completion or physical laptop performance.
 - Installer pipeline builds Full and Lite, tests both on Windows Server 2022 and 2025, and separately attempts Windows 11 ARM emulation. Exact job results remain authoritative; ARM is experimental and may fail without blocking x64 publication.
 - Live employer submissions, unattended account registration, real user OAuth consent, CAPTCHA completion and legacy Windows compatibility remain unvalidated.
+
+
+## 0.4 review and regression checks
+
+Review identified third-party-frame profile filling and stale profile-derived documents between queued jobs. The fixes restrict frame filling to the page origin, refresh profile data per job and rebuild cached documents after a profile/original-resume change during a pause. Missing selected original PDFs now stop preparation. Saved queues are rechecked against current preferences/status; heap ranking bounds candidate memory to the queue cap.
+
+Recovery tests cover data/history restoration, preservation of submitted-job protection, portable original resumes, conservative interrupted statuses, excluded vault/browser credentials, safety copies, archived old receipts, transaction/folder rollback on a simulated database failure, corrupt hashes, oversized input, unexpected/duplicate ZIP paths, invalid job IDs/statuses/settings and five-date rotation. Packaged Windows checks now also exercise backup export and restore. New desktop checks exercise queue preflight and removal.
+
+Exact CI results and release assets remain authoritative. Fixture tests still do not validate real employer submissions, real account registrations, live Gmail consent or universal portal compatibility.

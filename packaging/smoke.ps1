@@ -5,6 +5,7 @@ if ($installerProcess.ExitCode -ne 0) { throw 'Installer failed' }
 $report = Join-Path $env:RUNNER_TEMP "applypilot-$Name.json"
 $p = Start-Process "$env:LOCALAPPDATA\Programs\ApplyPilot\ApplyPilot.exe" -ArgumentList '--smoke-test', $report -PassThru
 if (-not $p.WaitForExit(120000)) { Stop-Process -Id $p.Id; throw 'Installed smoke test timed out' }
+if (Test-Path $report) { Write-Output (Get-Content $report -Raw) }
 if ($p.ExitCode -ne 0 -or -not (Test-Path $report)) { throw 'Installed smoke test failed' }
 $result = Get-Content $report -Raw | ConvertFrom-Json
 if (-not $result.ok) { throw ($result | ConvertTo-Json) }

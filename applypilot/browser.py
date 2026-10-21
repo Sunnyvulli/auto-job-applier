@@ -27,10 +27,20 @@ def answers(profile):
 def normalize(label):
     return re.sub(r'\s+', ' ', re.sub(r'[*:]+$', '',label.strip())).strip().lower()
 
+def same_origin(left,right):
+    try:
+        a,b=urlsplit(left),urlsplit(right)
+        return a.scheme in {'http','https'} and (a.scheme,a.hostname,a.port or (443 if a.scheme=='https' else 80))==(b.scheme,b.hostname,b.port or (443 if b.scheme=='https' else 80))
+    except ValueError:return False
+
+def form_frames(page):
+    # Embedded external forms require explicit browser entry, including srcdoc/opaque frames.
+    return [frame for frame in page.frames if frame==page.main_frame or same_origin(frame.url,page.url)]
+
 def fill_page(page, profile, dest):
     mapping=answers(profile)
     unresolved=[]
-    for frame in page.frames:
+    for frame in form_frames(page):
         for el in frame.locator('input,textarea,select').all():
             if not el.is_enabled(): continue
             typ=(el.get_attribute('type') or '').lower()
@@ -60,7 +70,7 @@ def fill_page(page, profile, dest):
                 try:
                     if not el.input_value().strip(): unresolved.append(label or 'Unlabelled required field')
                 except Exception: unresolved.append(label or 'Required control')
-    for frame in page.frames:
+    for frame in form_frames(page):
         for el in frame.locator('[role=combobox][aria-required=true]').all():
             if el.is_visible():
                 unresolved.append(el.get_attribute('aria-label') or 'Required custom dropdown: review manually')
@@ -117,10 +127,20 @@ class BrowserWorker:
         return bool(CONFIRMATION.search(text) and text!=baseline and not page.locator('input:not([type=hidden]):not([type=submit]):visible,textarea:visible,select:visible').count())
     def process(self,page,jid,job,profile,dest,auto):
         baseline=page.locator('body').inner_text();submitted=False
+        def resume_signature():
+            source=self.store.setting('resume_pdf')
+            if not source:return None
+            path=Path(source)
+            return (source,path.stat().st_mtime_ns,path.stat().st_size) if path.is_file() else (source,None)
+        resume_version=resume_signature()
         for step in range(25):
             if self.stop_event.is_set():return 'uncertain'
             if self.confirmed(page,baseline):return 'submitted'
-            profile=self.store.setting('profile',profile)
+            current=self.store.setting('profile',profile)
+            current_resume=resume_signature()
+            if current!=profile or current_resume!=resume_version:
+                dest=documents(self.store,current,job)
+                profile=current;resume_version=current_resume
             missing=fill_page(page,profile,dest)
             passwords=page.locator('input[type=password]:visible').count()
             captcha=page.locator('iframe[src*="captcha"],iframe[title*="challenge" i],.g-recaptcha,.h-captcha').count()
@@ -171,6 +191,7 @@ class BrowserWorker:
                         self.notify('Skipped a running, submitted or uncertain job.');continue
                     active=jid;self.active_started=now()
                     while not self.actions.empty():self.actions.get_nowait()
+                    profile=self.store.setting('profile',{})
                     job=self.store.job(jid);dest=documents(self.store,profile,job)
                     page.goto(job['url'],wait_until='domcontentloaded',timeout=45000)
                     if known_portal(page.url) and 'lever.co' in (urlsplit(page.url).hostname or '') and not urlsplit(page.url).path.endswith('/apply'):

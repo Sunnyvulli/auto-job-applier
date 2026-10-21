@@ -1,4 +1,4 @@
-# ApplyPilot 0.3
+# ApplyPilot 0.4
 
 A free local Windows workspace for finding jobs, preparing applications and tracking replies. A native sidebar dashboard, light/dark themes and preference-based queues reduce repeated entry. No paid AI API, hosted server or CAPTCHA-solving subscription is configured.
 
@@ -16,6 +16,8 @@ Install and open ApplyPilot. No Python or Node installation is required. Both ed
 3. **Sources:** add companies with simple controls or use the starter companies. Refresh all saved feeds together. Source imports are independent of application submission.
 4. **Overview:** build a queue to review the matching jobs, or click **Start my queue**. A reviewed pending queue is preserved when started. With no pending queue, the button builds one using your saved preferences. Only saved/prepared jobs can enter an automatic plan.
 5. **Browser:** review mode is the default. Optional automatic submission uses your saved facts on supported forms. Unknown questions, account registration and verification pause for you. Reusable answers can be added in Profile without writing JSON.
+
+Saved queues are rechecked against your current preferences and application status when started. Select jobs in the overview queue and use **Remove selected** to leave them out. Ranking keeps only the best 50 candidates in memory.
 
 The dashboard shows your library, prepared documents, applications needing input and submissions. Search is debounced and lists are paginated. Job details use readable descriptions. PDF preparation runs in the background. Unchanged document sets are cached and verified with hashes before reuse.
 
@@ -53,6 +55,16 @@ A synthetic Linux development benchmark with 10,000 jobs measured:
 | Bulk versus separate commits, 1,000 jobs | About 70× faster |
 
 These are local synthetic measurements, not laptop guarantees or network/application timings. Reproduce with `PYTHONPATH=. python benchmarks/run.py`; raw results are in [benchmarks/results-linux.json](benchmarks/results-linux.json).
+
+## Backups and recovery
+
+Open **Diagnostics → Export backup** to save a `.applypilot` archive. A daily local backup is also made shortly after startup; the five most recent daily dates are retained under your private data folder's `backups` directory. They are local recovery copies, not off-device protection. A failed backup is reported in Activity.
+
+Backups include your saved profile/answers, preferences, sources, queue, jobs/status/events, stored email messages and selected original resume PDF. They exclude browser cookies, portal vault entries, Gmail OAuth credentials, mail connection settings, generated documents and receipt files. **Backups are not encrypted and include personal information.** Keep exported copies somewhere private.
+
+**Diagnostics → Restore backup** validates file names, size limits, hashes, record structure and job identities before replacement. Stop the browser and wait for background work first. Restore saves the current workspace into a separate recovery archive and moves existing generated documents/receipts into a recovery folder so old receipts are not confused with restored history. A database failure rolls back the transaction and restores that folder. After success the app closes; reopen it and reconnect email/accounts. Automatic submission and recurring imports/mail sync start disabled. Submitted jobs stay protected; interrupted jobs become uncertain and require checking the portal. Generated documents are rebuilt as needed. SHA256 checks detect damage; they do not prove who created an archive. Import backups only from a trusted source.
+
+Application filling uses the main page and frames with the exact same origin. External and opaque embedded frames require manual entry. If a profile or original resume changes during a paused step, documents refresh before the next fill. A missing selected original PDF stops preparation instead of silently substituting a generated resume.
 
 ## Windows compatibility
 

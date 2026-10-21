@@ -43,3 +43,8 @@ Resume import reads local PDF/DOCX/text with file/page limits and requires human
 Cached documents are keyed by profile/job/template/source fingerprints and verified by file hashes. Bulk inserts validate URLs before beginning the transaction. WAL and pagination change performance, not application authorization. Preference plans exclude running, uncertain and submitted jobs. Automatic submission still requires the user's saved opt-in.
 
 Lite selects an installed Edge/Chrome browser. Browser profiles remain separate per engine. Full carries a tested pinned browser; choosing a system browser allows that browser's normal updates. No compatibility with arbitrary browser versions or legacy OSes is guaranteed. HTTP connection pooling is restricted to GET feed requests with bounded retries; it does not retry application POSTs.
+
+
+## 0.4 review
+
+Form data and resume uploads are restricted to the main page and same-origin frames; cross-origin and opaque frames are skipped. This does not verify the trustworthiness of a user-selected portal. Local backup archives use a fixed file allowlist, bounded sizes, verified hashes and validated data records, with no SQL or archive path extraction. They include personal profile and email content and are not encrypted. OS vault secrets and browser sessions are excluded. Integrity hashes are not signatures. Restore requires an idle app and an explicit in-app replacement confirmation, saves a safety copy, and disables unattended settings. Existing generated documents/receipts are archived separately. No independent security audit has been performed.

@@ -24,3 +24,22 @@ def test_dashboard_preferences_answers_and_pagination(tmp_path):
             for page in app.pages:app.show_page(page);root.update()
         app.toggle_theme();root.update();assert app.store.setting('theme')=='dark'
     finally:root.destroy()
+
+
+def test_queue_controls_recheck_and_remove(tmp_path,monkeypatch):
+    import tkinter as tk
+    from applypilot.desktop import App
+    root=tk.Tk();app=App(root,tmp_path)
+    try:
+        app.store.save_setting('profile',{'name':'Test User','email':'test@example.com'})
+        app.store.save_setting('preferences',{'titles':'Data Engineer','min_skills':0})
+        keep=app.store.add(dict(url='https://example.com/keep',company='Acme',title='Data Engineer'))
+        exclude=app.store.add(dict(url='https://example.com/exclude',company='Acme',title='Developer'))
+        app.queued_ids=[keep,exclude];started=[]
+        monkeypatch.setattr(app.worker,'start',lambda ids,auto:started.extend(ids))
+        app.start_reviewed_queue();assert started==[keep] and app.queued_ids==[keep]
+        app.queue_tree.selection_set(keep);app.remove_from_queue()
+        assert app.queued_ids==[] and app.store.setting('planned_queue')==[]
+        app.busy_count=1
+        with pytest.raises(ValueError,match='background tasks'):app.restore_data()
+    finally:root.destroy()

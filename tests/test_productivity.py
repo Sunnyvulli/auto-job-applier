@@ -66,3 +66,26 @@ def test_original_pdf_is_preserved(tmp_path):
 def test_browser_choice_rejects_arbitrary_channels():
     assert browser_order('chrome')==['chrome']
     with pytest.raises(ValueError):browser_order('shell-command')
+
+
+def test_preflight_rechecks_preferences_and_status(tmp_path):
+    from applypilot.productivity import queue_preflight
+    store=Store(tmp_path);ids=[]
+    for i,title in enumerate(['Data Engineer','Developer','Data Engineer']):ids.append(store.add(dict(url=f'https://example.com/{i}',company='Acme',title=title)))
+    store.state(ids[2],'submitted')
+    valid,skipped=queue_preflight(store,ids+[ids[0],'deleted'],{},dict(titles='Data Engineer'))
+    assert valid==[ids[0]] and len(skipped)==3
+
+
+def test_queue_bounded_ranking_matches_full_sort(tmp_path):
+    store=Store(tmp_path)
+    for i in range(120):store.add(dict(url=f'https://example.com/{i}',company='Acme',title='Engineer',description='Python SQL' if i%3 else 'Python'))
+    profile={'skills':'SQL, Python'};prefs={'queue_limit':7}
+    expected=sorted([(assess(profile,j,prefs)['score'],j['updated'],j['id']) for j in store.candidates()],reverse=True)[:7]
+    assert plan_queue(store,profile,prefs)==[x[2] for x in expected]
+
+
+def test_missing_original_resume_stops_document_preparation(tmp_path):
+    store=Store(tmp_path);store.save_setting('resume_pdf',str(tmp_path/'gone.pdf'))
+    jid=store.add(dict(url='https://example.com/job',company='Acme',title='Role'))
+    with pytest.raises(ValueError,match='missing'):documents(store,{'name':'Test','email':'test@example.com'},store.job(jid))

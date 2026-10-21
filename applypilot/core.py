@@ -124,7 +124,7 @@ def _http_session():
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
     if not hasattr(_http_local,'session'):
-        session=requests.Session();session.headers['User-Agent']='ApplyPilot/0.3 personal job assistant'
+        session=requests.Session();session.headers['User-Agent']='ApplyPilot/0.4 personal job assistant'
         adapter=HTTPAdapter(pool_connections=4,pool_maxsize=4,max_retries=Retry(total=2,backoff_factor=.5,status_forcelist=[429,502,503,504],allowed_methods=frozenset(['GET']),respect_retry_after_header=False))
         session.mount('https://',adapter);_http_local.session=session
     return _http_local.session
@@ -173,6 +173,7 @@ def documents(store, profile, job):
     dest.mkdir(parents=True, exist_ok=True)
     source=store.setting('resume_pdf')
     source_path=Path(source) if source else None
+    if source_path and not source_path.is_file():raise ValueError('Your selected original resume PDF is missing. Reimport it in Profile before preparing or applying.')
     source_hash=hashlib.sha256(source_path.read_bytes()).hexdigest() if source_path and source_path.is_file() else None
     fingerprint=hashlib.sha256(json.dumps({'template_version':3,'profile':profile,'job':{k:job.get(k,'') for k in ('title','company','description','url')},'source_hash':source_hash},sort_keys=True).encode()).hexdigest()
     manifest_path=dest/'manifest.json'

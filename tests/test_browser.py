@@ -107,3 +107,63 @@ def test_multistep_browser_process(page,tmp_path):
     page.goto('https://jobs.lever.co/acme/1/apply')
     worker=BrowserWorker(store,lambda _:None)
     assert worker.process(page,jid,store.job(jid),{'name':'Test User','email':'test@example.com'},tmp_path,True)=='submitted'
+
+
+def test_profile_not_filled_in_external_or_opaque_frames(page,tmp_path):
+    page.route('https://portal.example/**',lambda r:r.fulfill(content_type='text/html',body='<label>Email<input></label><iframe src="/embedded"></iframe><iframe src="https://external.example/form"></iframe><iframe srcdoc="&lt;label&gt;Email&lt;input&gt;&lt;/label&gt;"></iframe>' if r.request.url.endswith('/form') else '<label>Email<input></label>'))
+    page.route('https://external.example/**',lambda r:r.fulfill(content_type='text/html',body='<label>Email<input required></label>'))
+    page.goto('https://portal.example/form');page.wait_for_load_state('load')
+    assert not fill_page(page,{'email':'test@example.com'},tmp_path)
+    assert page.main_frame.locator('input').input_value()=='test@example.com'
+    assert next(f for f in page.frames if f.url.endswith('/embedded')).locator('input').input_value()=='test@example.com'
+    assert next(f for f in page.frames if 'external.example' in f.url).locator('input').input_value()==''
+    assert next(f for f in page.frames if f.url=='about:srcdoc').locator('input').input_value()==''
+
+
+def test_document_refresh_uses_profile_saved_during_pause(page,tmp_path):
+    import json
+    from applypilot.core import Store,documents
+    from applypilot.browser import BrowserWorker
+    store=Store(tmp_path/'data');old={'name':'Old Name','email':'old@example.com'};new={'name':'New Name','email':'new@example.com'}
+    store.save_setting('profile',old);jid=store.add(dict(url='https://example.com/job',company='Acme',title='Role'))
+    dest=documents(store,old,store.job(jid));page.set_content('<label>Full name<input></label>')
+    worker=BrowserWorker(store,lambda _:None);calls=[]
+    def pause(*args):
+        calls.append(1)
+        if len(calls)==1:store.save_setting('profile',new);return True
+        return False
+    worker.pause=pause
+    assert worker.process(page,jid,store.job(jid),old,dest,False)=='uncertain'
+    assert page.locator('input').input_value()=='New Name'
+    assert 'New Name' in (dest/'resume.txt').read_text()
+    assert 'Old Name' not in (dest/'resume.txt').read_text()
+
+
+def test_queue_reloads_profile_before_each_job(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    import playwright.sync_api as api
+    import applypilot.browser as module
+    import applypilot.system as system
+    from applypilot.core import Store
+    store=Store(tmp_path/'data');store.save_setting('profile',{'name':'Old Name','email':'old@example.com'})
+    ids=[store.add(dict(url=f'https://example.com/{i}',company='Acme',title='Role')) for i in range(2)]
+    class Page:
+        url='https://example.com/0'
+        def goto(self,url,**kwargs):self.url=url
+        def locator(self,*args):return SimpleNamespace(inner_text=lambda:'Confirmation fixture')
+    class Manager:
+        def __enter__(self):return SimpleNamespace(chromium=None)
+        def __exit__(self,*args):pass
+    page=Page();context=SimpleNamespace(pages=[page],close=lambda:None)
+    monkeypatch.setattr(api,'sync_playwright',Manager)
+    monkeypatch.setattr(system,'launch_context',lambda *args:context)
+    names=[];real_documents=module.documents
+    def capture(store,profile,job):
+        names.append(profile['name']);return real_documents(store,profile,job)
+    monkeypatch.setattr(module,'documents',capture)
+    worker=module.BrowserWorker(store,lambda _:None)
+    def process(*args):
+        store.save_setting('profile',{'name':'New Name','email':'new@example.com'});return 'submitted'
+    monkeypatch.setattr(worker,'process',process);worker.run(ids,auto=False)
+    assert names==['Old Name','New Name']
+    assert all(store.job(jid)['status']=='submitted' for jid in ids)

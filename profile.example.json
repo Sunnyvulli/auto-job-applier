@@ -1,0 +1,14 @@
+{
+  "name": "Your name",
+  "email": "you@example.com",
+  "phone": "",
+  "location": "",
+  "linkedin": "",
+  "website": "",
+  "skills": "Python, SQL",
+  "summary": "Enter a factual summary of your background.",
+  "experience": "",
+  "projects": "Describe projects you actually completed.",
+  "education": "",
+  "answers": {}
+}

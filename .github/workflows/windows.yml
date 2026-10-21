@@ -1,0 +1,59 @@
+name: Test and build Windows installer
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m pytest -q
+  windows:
+    needs: test
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}\browsers
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt -r requirements-dev.txt pyinstaller==6.16.0
+      - run: python -m playwright install chromium
+      - run: python -m pytest tests/test_core.py -q
+      - name: Freeze app with Python and Chromium
+        run: python -m PyInstaller --noconfirm --clean --windowed --name ApplyPilot --collect-all playwright --collect-all reportlab --hidden-import keyring.backends.Windows --add-data "browsers;browsers" launcher.py
+      - name: Compile installer
+        shell: pwsh
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\installer.iss'
+      - name: Smoke test installed app
+        shell: pwsh
+        run: |
+          $installer = Start-Process installer-output\ApplyPilot-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait
+          if ($installer.ExitCode -ne 0) { throw 'Installer failed' }
+          $p = Start-Process "$env:LOCALAPPDATA\Programs\ApplyPilot\ApplyPilot.exe" -PassThru
+          Start-Sleep -Seconds 12
+          $p.Refresh()
+          if ($p.HasExited) { throw 'App exited during startup' }
+          Stop-Process -Id $p.Id
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ApplyPilot-Windows-installer
+          path: installer-output/ApplyPilot-Setup.exe
+      - name: Publish installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $tag = "build-${{ github.run_number }}"
+          gh release create $tag installer-output/ApplyPilot-Setup.exe --title "ApplyPilot 0.1 preview ($tag)" --notes "Free local preview. Bundles Python and Chromium. See README for supported features and limitations. Unsigned installer."

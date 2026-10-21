@@ -1,0 +1,12 @@
+__pycache__/
+.pytest_cache/
+.venv/
+build/
+dist/
+browsers/
+installer-output/
+*.spec
+*.sqlite3*
+browser-session/
+.env
+credentials*

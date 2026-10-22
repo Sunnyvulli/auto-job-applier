@@ -142,7 +142,7 @@ def fetch_json(url):
         return json.loads(payload)
 
 def import_board(provider, company, region='global'):
-    from .sources import board_identifier, extended_board
+    from .sources import board_identifier, extended_board, country_location
     company=board_identifier(provider,company)
     if provider in {'Ashby','SmartRecruiters'}:return extended_board(provider,company)
     if provider == 'Greenhouse':
@@ -151,7 +151,7 @@ def import_board(provider, company, region='global'):
     if provider == 'Lever':
         host = 'api.eu.lever.co' if region == 'eu' else 'api.lever.co'
         data = fetch_json(f'https://{host}/v0/postings/{company}?mode=json')
-        return [dict(url=j['applyUrl'],company=company,title=j['text'],location=j.get('categories',{}).get('location',''),description=plain(j.get('descriptionPlain',j.get('description','')))+' '+plain(' '.join(x.get('content','') for x in j.get('lists',[])))) for j in data]
+        return [dict(url=j['applyUrl'],company=company,title=j['text'],location=country_location(j.get('categories',{}).get('location',''),j.get('country')),description=plain(j.get('descriptionPlain',j.get('description','')))+' '+plain(' '.join(x.get('content','') for x in j.get('lists',[])))) for j in data]
     raise ValueError('Unsupported provider')
 
 @lru_cache(maxsize=256)

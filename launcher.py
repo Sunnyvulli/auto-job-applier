@@ -24,13 +24,19 @@ def smoke_test(report):
             jid=app.store.add(dict(url='https://jobs.lever.co/test/synthetic/apply',company='Synthetic',title='Test role'))
             app.refresh();assert len(app.tree.get_children())==1;checks.append('profile and dashboard')
             dest=documents(app.store,app.store.setting('profile'),app.store.job(jid));assert (dest/'resume.pdf').stat().st_size>500;checks.append('PDF generation')
-            for view in ('Overview','Profile','Job library','Inbox','Sources','Preferences','Activity','Diagnostics'):
+            for view in ('Overview','Profile','Job library','Inbox','Discover jobs','Sources','Preferences','Activity','Diagnostics'):
                 app.show_page(view);root.update()
             app.show_page('Overview');root.geometry('1024x700');root.update();checks.append('all views and small window layout')
             from applypilot.productivity import plan_queue
             app.store.save_setting('preferences',{'titles':'Test','min_skills':0,'queue_limit':5})
             assert plan_queue(app.store,app.store.setting('profile'),app.store.setting('preferences'))==[jid]
             checks.append('preference queue')
+            from applypilot.discovery import geography_matches,discovery_matches,search_boards
+            assert geography_matches({'location':'Dallas | United States'},{'countries':'US','cities':'Dallas'})
+            assert not geography_matches({'location':'Dallas | United States'},{'countries':'India'})
+            assert discovery_matches({'title':'Data Engineer','company':'Example','location':'India'},{'titles':'Data Engineer','countries':'India'})
+            assert len(search_boards(app.store,{}))>20
+            checks.append('discovery filters and bundled employer catalog')
             from applypilot.tailoring import generate_draft,save_draft,context_hash
             with app.store.connect() as c:c.execute('UPDATE jobs SET description=? WHERE id=?',('Test role requiring Python',jid))
             job=app.store.job(jid);profile=app.store.setting('profile');draft=generate_draft(app.store,profile,job)

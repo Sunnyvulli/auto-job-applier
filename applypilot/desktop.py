@@ -33,7 +33,7 @@ class App:
         self.active_draft_job=None;self.busy_count=0;self.offset=0;self.total_jobs=0;self.filter_timer=None
         self.queued_ids=self.store.setting('planned_queue',[]);self.pages={};self.nav={};self.current_page=''
         self.status=tk.StringVar(value='Welcome. Import your resume once, then set your job preferences.')
-        root.title('ApplyPilot 0.6');root.geometry(f'{min(1240,root.winfo_screenwidth()-60)}x{min(820,root.winfo_screenheight()-90)}');root.minsize(min(960,root.winfo_screenwidth()-40),min(640,root.winfo_screenheight()-60))
+        root.title('ApplyPilot 0.7');root.geometry(f'{min(1240,root.winfo_screenwidth()-60)}x{min(820,root.winfo_screenheight()-90)}');root.minsize(min(960,root.winfo_screenwidth()-40),min(640,root.winfo_screenheight()-60))
         self.colors=apply_style(root,self.store.setting('theme','light'))
         root.grid_rowconfigure(0,weight=1);root.grid_columnconfigure(1,weight=1)
         c=self.colors
@@ -45,13 +45,13 @@ class App:
         self.nav_area=tk.Frame(self.sidebar,bg=c['nav']);self.nav_area.pack(fill='x')
         footer=tk.Frame(self.sidebar,bg=c['nav']);footer.pack(side='bottom',fill='x',padx=20,pady=22)
         tk.Label(footer,text='LOCAL  /  PRIVATE  /  FREE',font=(UI_FONT,8,'bold'),bg=c['nav'],fg=c['navtext']).pack(anchor='w')
-        tk.Label(footer,text='Version 0.6 preview',font=(UI_FONT,9),bg=c['nav'],fg=c['navtext']).pack(anchor='w',pady=(6,0))
+        tk.Label(footer,text='Version 0.7 preview',font=(UI_FONT,9),bg=c['nav'],fg=c['navtext']).pack(anchor='w',pady=(6,0))
         shell=ttk.Frame(root,padding=(24,18,24,12));shell.grid(row=0,column=1,sticky='nsew');shell.grid_rowconfigure(1,weight=1);shell.grid_columnconfigure(0,weight=1)
         top=ttk.Frame(shell);top.grid(row=0,column=0,sticky='ew',pady=(0,18))
         self.page_title=tk.StringVar(value='Overview');ttk.Label(top,textvariable=self.page_title,style='Section.TLabel').pack(side='left')
         ttk.Button(top,text='Theme',command=self.toggle_theme).pack(side='right');ttk.Label(top,text='Everything stays on your laptop',style='Muted.TLabel').pack(side='right',padx=12)
         self.tabs=ttk.Frame(shell);self.tabs.grid(row=1,column=0,sticky='nsew');self.tabs.grid_columnconfigure(0,weight=1);self.tabs.grid_rowconfigure(0,weight=1);self.tabs.grid_propagate(False)
-        self.home_tab();self.profile_tab();self.jobs_tab();self.mail_tab();self.settings_tab();self.preferences_tab();self.activity_tab();self.diagnostics_tab()
+        self.home_tab();self.profile_tab();self.jobs_tab();self.mail_tab();self.discovery_tab();self.settings_tab();self.preferences_tab();self.activity_tab();self.diagnostics_tab()
         bottom=ttk.Frame(shell);bottom.grid(row=2,column=0,sticky='ew',pady=(12,0));bottom.grid_columnconfigure(0,weight=1)
         ttk.Label(bottom,textvariable=self.status,wraplength=700,style='Muted.TLabel').grid(row=0,column=0,sticky='w')
         self.progress=ttk.Progressbar(bottom,mode='indeterminate',length=100);self.progress.grid(row=0,column=1,padx=(10,0));self.progress.grid_remove()
@@ -184,7 +184,7 @@ class App:
     def jobs_tab(self):
         t=self.tab('Job library')
         ttk.Label(t,text='Find the roles worth your time.',style='Title.TLabel').pack(anchor='w')
-        ttk.Label(t,text='Import company openings, narrow your list, and build your next queue.',style='Muted.TLabel').pack(anchor='w',pady=(4,16))
+        ttk.Label(t,text='Use Discover jobs for automatic role/country search, or import a specific board below.',style='Muted.TLabel').pack(anchor='w',pady=(4,16))
         top=ttk.Frame(t);top.pack(fill='x')
         self.provider=tk.StringVar(value='Greenhouse');ttk.Combobox(top,textvariable=self.provider,values=PROVIDERS,width=15,state='readonly').pack(side='left')
         self.board=tk.StringVar();ttk.Entry(top,textvariable=self.board,width=24).pack(side='left',padx=6)
@@ -212,6 +212,7 @@ class App:
         ttk.Button(actions,text='Prepare PDFs',command=lambda:self.guard(self.prepare)).pack(side='left',padx=6)
         ttk.Button(actions,text='Tailor application',command=lambda:self.guard(self.tailor)).pack(side='left',padx=6)
         ttk.Button(more,text='Learned answers',command=lambda:self.guard(self.learned_answers)).pack(side='left',padx=(0,8))
+        ttk.Button(more,text='Find jobs',command=lambda:self.show_page('Discover jobs')).pack(side='left',padx=(0,8))
         ttk.Button(more,text='Account tools',command=lambda:self.guard(self.account_tools)).pack(side='left')
         ttk.Button(actions,text='Set status',command=lambda:self.guard(self.set_status)).pack(side='right')
         ttk.Button(actions,text='Refresh',command=self.refresh).pack(side='right',padx=6)
@@ -410,6 +411,48 @@ class App:
             w.destroy()
         ttk.Button(w,text='Generate password for new account',command=lambda:self.guard(lambda:save(True))).pack(padx=12,pady=5,anchor='w')
         ttk.Button(w,text='Save existing account password',command=lambda:self.guard(lambda:save(False))).pack(padx=12,pady=5,anchor='w')
+    def discovery_tab(self):
+        t=self.tab('Discover jobs')
+        ttk.Label(t,text='Your roles. Your countries. One search.',style='Title.TLabel').pack(anchor='w')
+        ttk.Label(t,text='Save roles and countries in Preferences. Cities are optional. Search the built-in employer catalog and your saved sources without entering each company.',style='Muted.TLabel',wraplength=700).pack(anchor='w',pady=(8,16))
+        actions=ttk.Frame(t);actions.pack(fill='x',pady=8)
+        ttk.Button(actions,text='Find jobs',style='Accent.TButton',command=lambda:self.guard(self.find_jobs)).pack(side='left')
+        ttk.Button(actions,text='Find & apply',command=lambda:self.guard(lambda:self.find_jobs(True))).pack(side='left',padx=8)
+        ttk.Button(actions,text='Edit roles & countries',command=lambda:self.show_page('Preferences')).pack(side='left')
+        ttk.Button(actions,text='Open job library',command=lambda:self.show_page('Job library')).pack(side='left',padx=8)
+        self.repeat_discovery=tk.BooleanVar(value=self.store.setting('repeat_discovery',False))
+        ttk.Checkbutton(t,text='Find new jobs every 15 minutes while ApplyPilot is open (import only)',variable=self.repeat_discovery,command=lambda:self.store.save_setting('repeat_discovery',self.repeat_discovery.get())).pack(anchor='w',pady=12)
+        ttk.Label(t,text='Find & apply imports matches, rebuilds a bounded queue using saved skill filters, and starts the existing application assistant. Automatic submission still follows your Overview setting. Unknown questions and verification pause for you.',style='Muted.TLabel',wraplength=700).pack(anchor='w',pady=(0,12))
+        self.discovery_log=tk.Text(t,height=12,wrap='word',font=(CODE_FONT,10))
+        self.discovery_log.pack(fill='both',expand=True)
+        ttk.Label(t,text='Coverage: public Greenhouse, Lever, Ashby and SmartRecruiters feeds in the employer catalog plus saved sources. This does not search every company. Unknown-country listings are excluded. Official employer/ATS application links open in the existing browser.',style='Muted.TLabel',wraplength=700).pack(anchor='w',pady=10)
+        self.show_discovery_report()
+
+    def show_discovery_report(self):
+        from .discovery import report_text
+        self.discovery_log.configure(state='normal');self.discovery_log.delete('1.0','end')
+        self.discovery_log.insert('1.0',report_text(self.store.setting('discovery_report',{})))
+        self.discovery_log.configure(state='disabled')
+
+    def find_jobs(self,start=False):
+        from .discovery import discover, validate_search
+        if start and self.worker.thread and self.worker.thread.is_alive():raise ValueError('A browser queue is already running.')
+        preferences=self.store.setting('preferences',{});validate_search(preferences)
+        if start:
+            profile=self.store.setting('profile',{})
+            if not profile.get('name') or '@' not in profile.get('email',''):raise ValueError('Save your profile name and email before Find & apply.')
+        if not self.import_lock.acquire(blocking=False):
+            self.status.set('A job search or source refresh is already running.');return
+        self.status.set('Finding jobs across employer career feeds…')
+        def work():
+            try:
+                report=discover(self.store,preferences,self.queue.put)
+                failed=sum(bool(s['error']) for s in report['sources'])
+                summary=f"Search complete: {report['scanned']:,} scanned, {report['matched']:,} matching, {report['added']:,} new; {failed} source failures."
+                return {'type':'discovered','summary':summary,'start':start and bool(report['job_ids']),'job_ids':report['job_ids']}
+            finally:self.import_lock.release()
+        self.background(work)
+
     def settings_tab(self):
         t=self.tab('Sources')
         ttk.Label(t,text='Follow companies, not browser tabs.',style='Title.TLabel').pack(anchor='w')
@@ -467,6 +510,9 @@ class App:
         self.background(work)
 
     def scheduled_refresh(self):
+        if self.store.setting('repeat_discovery',False):
+            try:self.find_jobs()
+            except ValueError as e:self.status.set('Scheduled search skipped: '+str(e))
         if self.store.setting('repeat_sources',False):self.refresh_sources()
         self.root.after(900000,self.scheduled_refresh)
     def activity_tab(self):
@@ -492,6 +538,14 @@ class App:
             except queue.Empty:break
             if isinstance(event,dict):
                 if event['type']=='task_done':self.busy_count=max(0,self.busy_count-1)
+                elif event['type']=='discovered':
+                    self.show_discovery_report()
+                    self.status.set(event['summary'])
+                    self.log.insert('end',event['summary']+'\n')
+                    if event.get('start'):
+                        try:
+                            self.build_queue(True,event['job_ids'])
+                        except Exception as e:self.status.set(str(e))
                 elif event['type']=='questions':
                     self.active_draft_job=event['job_id'];self.status.set(f'{event["count"]} questions need review. Select Review drafts to inspect proposed answers.')
                 elif event['type']=='resume_import':self.review_resume(event)
@@ -553,7 +607,7 @@ class App:
         ttk.Button(helpers,text='Remove selected',command=lambda:self.guard(self.remove_from_queue)).pack(side='right',padx=5)
         ttk.Button(helpers,text='Documents',command=lambda:self.open_path(self.store.folder/'documents')).pack(side='right',padx=6)
         ttk.Checkbutton(t,text='Submit supported forms automatically using my saved answers',variable=self.auto,command=lambda:self.store.save_setting('auto_submit',self.auto.get())).pack(anchor='w')
-        ttk.Label(t,text='First time? Import your resume in Profile, save Preferences, then add company Sources.',style='Muted.TLabel',wraplength=700).pack(anchor='w',pady=(7,0))
+        ttk.Label(t,text='First time? Import your resume in Profile, save Preferences, then choose Find jobs in Discover jobs.',style='Muted.TLabel',wraplength=700).pack(anchor='w',pady=(7,0))
         self.render_queue()
     def render_queue(self):
         self.queue_tree.delete(*self.queue_tree.get_children())
@@ -563,16 +617,16 @@ class App:
             except ValueError:continue
             valid.append(jid);self.queue_tree.insert('','end',iid=jid,values=(j['title'],j['company'],j['status'].replace('_',' ')))
         self.queued_ids=valid
-    def build_queue(self,start=False):
+    def build_queue(self,start=False,candidate_ids=None):
         if self.worker.thread and self.worker.thread.is_alive():raise ValueError('A browser queue is already running.')
         profile=self.store.setting('profile',{});preferences=self.store.setting('preferences',{})
         if not profile.get('name') or '@' not in profile.get('email',''):
             self.show_page('Profile');raise ValueError('Save your profile name and email first.')
         if not preferences.get('titles','').strip():
             self.show_page('Preferences');raise ValueError('Save target role keywords before building a queue.')
-        if start and self.queued_ids:
+        if start and self.queued_ids and candidate_ids is None:
             self.start_reviewed_queue();return
-        def work():return {'type':'start_planned' if start else 'planned','ids':plan_queue(self.store,profile,preferences)}
+        def work():return {'type':'start_planned' if start else 'planned','ids':plan_queue(self.store,profile,preferences,candidate_ids)}
         self.background(work)
     def start_reviewed_queue(self):
         valid,skipped=queue_preflight(self.store,self.queued_ids,self.store.setting('profile',{}),self.store.setting('preferences',{}))
@@ -590,7 +644,7 @@ class App:
         ttk.Label(t,text='Set these once. Matching will prepare a bounded queue each time you start.',style='Muted.TLabel',wraplength=700).pack(anchor='w',pady=(5,20))
         p=self.store.setting('preferences',{});self.pref_fields={}
         form=ttk.Frame(t);form.pack(fill='x');form.grid_columnconfigure(1,weight=1)
-        for i,(key,label,default) in enumerate([('titles','Target titles, comma separated',''),('locations','Locations, optional',''),('exclude','Exclude companies, optional',''),('min_skills','Minimum matching skills','1'),('queue_limit','Maximum jobs per queue (1–50)','10')]):
+        for i,(key,label,default) in enumerate([('titles','Target roles, comma separated',''),('countries','Countries, comma separated (e.g. US, India)',''),('cities','Cities, optional (comma separated)',''),('locations','Additional location keywords, optional',''),('exclude','Exclude companies, optional',''),('min_skills','Minimum matching skills','1'),('queue_limit','Maximum jobs per queue (1–50)','10')]):
             ttk.Label(form,text=label).grid(row=i,column=0,sticky='w',pady=10,padx=(0,16))
             var=tk.StringVar(value=str(p.get(key,default)));self.pref_fields[key]=var;ttk.Entry(form,textvariable=var).grid(row=i,column=1,sticky='ew',pady=10)
         self.exclude_senior=tk.BooleanVar(value=p.get('exclude_senior',True));ttk.Checkbutton(t,text='Exclude senior / staff / manager roles',variable=self.exclude_senior).pack(anchor='w',pady=12)
@@ -604,6 +658,8 @@ class App:
         ttk.Label(t,text='Matching uses title, location and skill keywords. It does not establish eligibility, sponsorship or employer acceptance.',style='Muted.TLabel',wraplength=700).pack(anchor='w')
     def save_preferences(self):
         p={k:var.get().strip() for k,var in self.pref_fields.items()}
+        from .discovery import country_name, parts
+        for country in parts(p.get('countries','')):country_name(country)
         p['min_skills']=int(p['min_skills']);p['queue_limit']=int(p['queue_limit'])
         if not 0<=p['min_skills']<=50 or not 1<=p['queue_limit']<=50:raise ValueError('Use 0–50 skills and 1–50 jobs per queue.')
         p.update(exclude_senior=self.exclude_senior.get(),low_resource=self.low_resource.get(),browser=self.browser_choice.get())

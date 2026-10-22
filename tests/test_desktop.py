@@ -99,3 +99,34 @@ def test_learning_memory_review_and_global_promotion(tmp_path,desktop_root):
         window.tree.selection_set(identity);window.change('delete');assert not memories(app.store)
         window.window.destroy()
     finally:close_window(root)
+
+
+def test_discover_jobs_import_and_start_current_results(tmp_path,monkeypatch,desktop_root):
+    import tkinter as tk
+    from applypilot.desktop import App
+    from applypilot import discovery
+    root=tk.Toplevel(desktop_root);app=App(root,tmp_path)
+    try:
+        app.store.save_setting('profile',{'name':'Alex','email':'alex@example.com','skills':'SQL'})
+        app.pref_fields['titles'].set('Data Engineer');app.pref_fields['countries'].set('India')
+        app.pref_fields['cities'].set('');app.pref_fields['min_skills'].set('0');app.save_preferences()
+        monkeypatch.setattr(discovery,'CATALOG',{'Lever':('acme',)})
+        monkeypatch.setattr(discovery,'import_board',lambda *a:[dict(url='https://jobs.lever.co/acme/1',company='Acme',title='Data Engineer',location='Hyderabad | India',description='SQL')])
+        old=app.store.add(dict(url='https://example.com/old',company='Other',title='Data Engineer',location='India',description='SQL'))
+        app.queued_ids=[old]
+        # Deterministic task execution, while exercising the normal event pump.
+        monkeypatch.setattr(app,'background',lambda fn:app.queue.put(fn()))
+        started=[];monkeypatch.setattr(app.worker,'start',lambda ids,auto:started.append((ids,auto)))
+        app.find_jobs(True);app.pump()
+        assert len(started)==1 and old not in started[0][0] and not started[0][1]
+        assert app.store.setting('discovery_report')['added']==1
+        assert '1 matching' in app.discovery_log.get('1.0','end')
+        assert not app.import_lock.locked()
+        started.clear()
+        monkeypatch.setattr(discovery,'import_board',lambda *a:[])
+        app.find_jobs(True);app.pump();assert started==[]
+        def failed(*a):raise ValueError('Offline')
+        monkeypatch.setattr(discovery,'import_board',failed)
+        app.find_jobs(True);app.pump();assert started==[]
+        assert 'FAILED: Offline' in app.discovery_log.get('1.0','end')
+    finally:close_window(root)

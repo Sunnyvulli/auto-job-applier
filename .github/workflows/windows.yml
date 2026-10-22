@@ -44,7 +44,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt -r requirements-dev.txt pyinstaller==6.16.0
       - run: python -m playwright install --no-shell chromium
-      - run: python -m pytest tests/test_core.py tests/test_productivity.py tests/test_recovery.py tests/test_tailoring.py tests/test_learning.py tests/test_desktop.py -q
+      - run: python -m pytest tests/test_core.py tests/test_productivity.py tests/test_discovery.py tests/test_recovery.py tests/test_tailoring.py tests/test_learning.py tests/test_desktop.py -q
         timeout-minutes: 3
       - name: Freeze app with bundled browser
         run: python -m PyInstaller --noconfirm --clean --windowed --name ApplyPilot --collect-all playwright --collect-all reportlab --hidden-import keyring.backends.Windows --copy-metadata google-auth --copy-metadata google-auth-oauthlib --copy-metadata requests-oauthlib --add-data "browsers;browsers" launcher.py
@@ -107,4 +107,4 @@ jobs:
           if [ "$branch_head" != "${{ github.sha }}" ]; then exit 0; fi
           cd installer-output
           sha256sum *.exe > SHA256SUMS.txt
-          gh release create "build-${{ github.run_number }}" *.exe SHA256SUMS.txt --target "${{ github.sha }}" --title "ApplyPilot 0.6 preview" --notes "Learn manual form corrections, confirm before future reuse, manage scoped answer memory, and support native radio groups. Both editions tested on Windows Server 2022 and 2025. ARM is experimental; check the ARM job result. See README for supported behavior and live-validation limits."
+          gh release create "build-${{ github.run_number }}" *.exe SHA256SUMS.txt --target "${{ github.sha }}" --title "ApplyPilot 0.7 preview" --notes "Automatic employer-feed discovery by role and country, optional city filters, source coverage reports and Find & apply. Existing document and answer-learning workflows retained. Both editions tested on Windows Server 2022 and 2025. ARM is experimental; check the ARM job result. See README for supported behavior and live-validation limits."

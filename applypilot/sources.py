@@ -5,6 +5,21 @@ from .core import fetch_json, plain
 
 PROVIDERS=['Greenhouse','Lever','Ashby','SmartRecruiters']
 
+def country_location(label, country):
+    if not country:return label or ''
+    from .discovery import country_name
+    try:country=country_name(country).title()
+    except ValueError:return label or ''
+    return (label or '')+' | '+country
+
+def ashby_location(job):
+    locations=[]
+    for item in [job]+(job.get('secondaryLocations') or []):
+        address=(item.get('address') or {}).get('postalAddress',{}) or {}
+        label=item.get('location','') or item.get('name','') or address.get('addressLocality','')
+        locations.append(country_location(label,address.get('addressCountry','')))
+    return '; '.join(dict.fromkeys(x for x in locations if x))
+
 def board_identifier(provider,value):
     value=value.strip()
     if '://' in value:
@@ -19,7 +34,7 @@ def board_identifier(provider,value):
 def extended_board(provider,company):
     if provider=='Ashby':
         data=fetch_json(f'https://api.ashbyhq.com/posting-api/job-board/{company}')
-        return [dict(url=j.get('applyUrl') or j['jobUrl'],company=company,title=j['title'],location=j.get('location',''),description=plain(j.get('descriptionPlain') or j.get('descriptionHtml',''))) for j in data['jobs'] if j.get('isListed',True)]
+        return [dict(url=j.get('applyUrl') or j['jobUrl'],company=company,title=j['title'],location=ashby_location(j),description=plain(j.get('descriptionPlain') or j.get('descriptionHtml',''))) for j in data['jobs'] if j.get('isListed',True)]
     if provider=='SmartRecruiters':
         result=[];seen=set();offset=0
         for _ in range(100):
@@ -32,7 +47,7 @@ def extended_board(provider,company):
                 seen.add(j['id']);location=j.get('location',{})
                 # Public hosted URL accepts the canonical posting ID; never navigate a feed-supplied API ref.
                 url='https://jobs.smartrecruiters.com/'+company+'/'+quote(str(j['id']),safe='')
-                result.append(dict(url=url,company=j.get('company',{}).get('name',company),title=j['name'],location=', '.join(filter(None,[location.get('city'),location.get('country')])),description=plain(j.get('jobAd',{}).get('sections',{}).get('jobDescription',{}).get('text',''))))
+                result.append(dict(url=url,company=j.get('company',{}).get('name',company),title=j['name'],location=country_location(location.get('city',''),location.get('country','')),description=plain(j.get('jobAd',{}).get('sections',{}).get('jobDescription',{}).get('text',''))))
             offset+=len(items)
             if offset>=data.get('totalFound',offset):break
         else:raise ValueError('Board exceeds 10,000 listings. Use selected job links instead.')

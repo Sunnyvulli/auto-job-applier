@@ -56,16 +56,20 @@ def assess(profile,job,preferences):
     excluded=terms(preferences.get('exclude',''))
     if wanted and not any(x in title for x in wanted):reasons.append('Title outside preferences')
     if places and not any(x in location for x in places):reasons.append('Location outside preferences')
+    from .discovery import geography_matches
+    if not geography_matches(job,preferences):reasons.append('Country or city outside preferences (or unknown)')
     if any(x in company for x in excluded):reasons.append('Excluded company')
     if preferences.get('exclude_senior',False) and re.search(r'\b(senior|staff|principal|director|head|sr\.?|lead|manager)\b',title):reasons.append('Seniority excluded')
     minimum=int(preferences.get('min_skills',0))
     if len(found)<minimum:reasons.append('Insufficient skill overlap')
     return dict(eligible=not reasons,skills=found,score=len(found),reasons=reasons,note='Preference/keyword match; verify qualifications and work authorization.')
 
-def plan_queue(store,profile,preferences):
+def plan_queue(store,profile,preferences,candidate_ids=None):
     cap=max(1,min(50,int(preferences.get('queue_limit',10))))
+    allowed=set(candidate_ids) if candidate_ids is not None else None
     ranked=[]
     for job in store.candidates():
+        if allowed is not None and job['id'] not in allowed:continue
         assessment=assess(profile,job,preferences)
         if assessment['eligible']:
             heapq.heappush(ranked,(assessment['score'],job['updated'],job['id']))

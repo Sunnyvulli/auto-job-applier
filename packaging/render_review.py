@@ -31,5 +31,10 @@ with tempfile.TemporaryDirectory() as folder:
     memory.tree.selection_set(memory.tree.get_children()[0]);memory.details();root.update();w=memory.window
     ImageGrab.grab(bbox=(w.winfo_rootx(),w.winfo_rooty(),w.winfo_rootx()+w.winfo_width(),w.winfo_rooty()+w.winfo_height())).save(output/'learning.png')
     memory.window.destroy()
+    app.store.save_setting('preferences',dict(titles='Data Engineer, Machine Learning Engineer',countries='United States, India',cities=''))
+    app.store.save_setting('discovery_report',dict(finished='Synthetic UI preview',roles='Data Engineer, Machine Learning Engineer',countries='United States, India',cities='',scanned=1200,matched=18,added=12,invalid=0,coverage='Example report — built-in employer catalog plus saved sources',sources=[dict(provider='Lever',company='example',found=240,matched=8,added=5,error='')]))
+    app.show_discovery_report();root.deiconify();root.geometry('1024x700');app.show_page('Discover jobs');root.lift();root.update();w=root
+    ImageGrab.grab(bbox=(w.winfo_rootx(),w.winfo_rooty(),w.winfo_rootx()+w.winfo_width(),w.winfo_rooty()+w.winfo_height())).save(output/'discovery.png')
+
     for callback in root.tk.call('after','info'):root.after_cancel(callback)
     studio.window.destroy();root.destroy()

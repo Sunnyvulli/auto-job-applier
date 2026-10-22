@@ -79,7 +79,7 @@ def validate_data(data):
     profile=settings.get('profile',{})
     if any(not isinstance(v,str) for k,v in profile.items() if k!='answers') or not isinstance(profile.get('answers',{}),dict) or any(not isinstance(k,str) or not isinstance(v,str) for k,v in profile.get('answers',{}).items()):raise ValueError('Invalid profile fields.')
     prefs=settings.get('preferences',{})
-    if any(not isinstance(prefs.get(k,''),str) for k in ('titles','locations','exclude','browser')):raise ValueError('Invalid preference fields.')
+    if any(not isinstance(prefs.get(k,''),str) for k in ('titles','locations','countries','cities','exclude','browser')):raise ValueError('Invalid preference fields.')
     if not 0<=int(prefs.get('min_skills',0))<=50 or not 1<=int(prefs.get('queue_limit',10))<=50:raise ValueError('Invalid preference limits.')
     if any(type(prefs[k]) is not bool for k in ('exclude_senior','low_resource') if k in prefs):raise ValueError('Invalid preference flags.')
     if prefs.get('browser','auto') not in {'auto','bundled','msedge','chrome'}:raise ValueError('Invalid browser preference.')
@@ -154,7 +154,7 @@ def restore_backup(store,path):
                 columns=COLUMNS[table]
                 c.executemany('INSERT INTO '+table+'('+','.join(columns)+') VALUES('+','.join('?' for _ in columns)+')',[[row[k] for k in columns] for row in data[table]])
             c.execute('DELETE FROM settings')
-            settings=dict(data['settings'],auto_submit=False,learn_answers=False,repeat_sources=False,repeat_mail=False,resume_pdf=str(resume) if resume else None)
+            settings=dict(data['settings'],auto_submit=False,learn_answers=False,repeat_sources=False,repeat_discovery=False,repeat_mail=False,resume_pdf=str(resume) if resume else None)
             c.executemany('INSERT INTO settings VALUES (?,?)',[(k,json.dumps(v)) for k,v in settings.items()])
             c.execute("UPDATE jobs SET status='uncertain',note='Restored interrupted application: check portal before retrying.' WHERE status IN ('running','needs_attention')")
         return safety

@@ -89,3 +89,12 @@ def test_missing_original_resume_stops_document_preparation(tmp_path):
     store=Store(tmp_path);store.save_setting('resume_pdf',str(tmp_path/'gone.pdf'))
     jid=store.add(dict(url='https://example.com/job',company='Acme',title='Role'))
     with pytest.raises(ValueError,match='missing'):documents(store,{'name':'Test','email':'test@example.com'},store.job(jid))
+
+
+def test_discovery_queue_cannot_use_unrelated_library_jobs(tmp_path):
+    store=Store(tmp_path)
+    old=store.add(dict(url='https://example.com/old',company='Acme',title='Data Engineer',location='India',description='SQL Python'))
+    current=store.add(dict(url='https://example.com/current',company='Acme',title='Data Engineer',location='India',description='SQL'))
+    pref=dict(titles='Data Engineer',countries='India',queue_limit=10)
+    assert plan_queue(store,{'skills':'SQL, Python'},pref,[current])==[current]
+    assert plan_queue(store,{'skills':'SQL, Python'},pref,[])==[]

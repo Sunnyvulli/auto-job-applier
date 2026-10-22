@@ -1,4 +1,4 @@
-# ApplyPilot 0.6
+# ApplyPilot 0.7
 
 A free local Windows workspace for finding jobs, preparing applications and tracking replies. A native sidebar dashboard, light/dark themes and preference-based queues reduce repeated entry. No paid AI API, hosted server or CAPTCHA-solving subscription is configured.
 
@@ -12,8 +12,8 @@ Install and open ApplyPilot. No Python or Node installation is required. Both ed
 ## A shorter daily workflow
 
 1. **Profile:** import a PDF, DOCX or text resume, review the extracted sections, then save. For PDFs, optionally keep the original file and formatting for applications. You can also edit the profile manually. Resume extraction is heading/contact based and requires review; scanned files need OCR first.
-2. **Preferences:** set target role keywords, locations, excluded companies, minimum skill overlap and a queue limit. Turn on low resource mode if needed. Matching is a keyword/preference filter, not proof of eligibility or sponsorship.
-3. **Sources:** add companies with simple controls or use the starter companies. Refresh all saved feeds together. Source imports are independent of application submission.
+2. **Preferences:** set target role keywords, countries, optional cities, excluded companies, minimum skill overlap and a queue limit. Turn on low resource mode if needed. Matching is a keyword/preference filter, not proof of eligibility or sponsorship.
+3. **Discover jobs:** choose **Find jobs** to scan the built-in employer catalog plus your saved sources, then import only matching roles/countries/cities. No per-company entry is required. **Find & apply** searches, rebuilds a queue restricted to the current search results, and starts the existing browser assistant. Optional 15-minute discovery imports only; it does not start application queues. **Sources** remains available to expand coverage with more company boards.
 4. **Overview:** build a queue to review the matching jobs, or click **Start my queue**. A reviewed pending queue is preserved when started. With no pending queue, the button builds one using your saved preferences. Only saved/prepared jobs can enter an automatic plan.
 5. **Browser:** review mode is the default. Optional automatic submission uses your saved facts on supported forms. Unknown questions, account registration and verification pause for you. Reusable answers can be added in Profile without writing JSON.
 
@@ -25,7 +25,7 @@ The dashboard shows your library, prepared documents, applications needing input
 
 | Area | Implemented behavior |
 |---|---|
-| Job feeds | Greenhouse, Lever global/EU, Ashby, SmartRecruiters |
+| Job discovery | Automatic role/country search across the built-in employer catalog plus saved Greenhouse, Lever global/EU, Ashby and SmartRecruiters feeds; optional cities |
 | Applications | Exact labeled text fields, native selects/radio groups, hidden/visible resume uploads, multi-step Next/Continue; approved job-specific and confirmed learned answers |
 | Automatic submission | Opt-in for recognized Lever/Greenhouse forms; other portals use assisted completion |
 | Documents | Base templates or reviewed job-specific resume/letter PDFs; original-PDF override is explicit per job |
@@ -40,6 +40,15 @@ The dashboard shows your library, prepared documents, applications needing input
 | Duplicate protection | Unique URLs, atomic claims, no automatic retries of submitted/uncertain jobs, interruption recovery |
 
 Starter sources are editable examples, not a complete employer directory or eligibility recommendations. This is preview software. No real employer submissions, account registrations or user Gmail consent have been performed by the developer. Fixture tests are not live-portal certification.
+
+
+## Discovery coverage and location evidence
+
+**Discover jobs** searches all entries in the built-in catalog (`applypilot/discovery.py`) plus your saved company sources, without asking you to add those catalog companies individually. This is a finite catalog, **not all companies worldwide**, a web search engine, or coverage of LinkedIn/Indeed/Workday. No paid search API or scraping account is required. The report lists every source, failures, scanned listings, matches and new imports. Retired company boards can fail; other sources continue. Add a company in Sources to include it in future searches.
+
+Roles are comma-separated alternative phrases, matched as whole words in the job title (for example `Data Engineer, Machine Learning Engineer`). Countries are required for discovery (`United States, India` or `US, IN`); cities are optional and must match the same location option as the country. Structured employer country data is preserved for Lever, Ashby and SmartRecruiters. Otherwise a country must be explicit in the published location. **City-only, state-only, unknown-country and worldwide-only locations are excluded rather than guessed**; this reduces coverage, especially on Greenhouse. Remote US/USA/United States labels do match the US. Search filters do not infer work authorization or sponsorship. The queue also applies saved skill, seniority, company exclusions and any legacy additional-location filter.
+
+Find & apply only queues saved/prepared listings returned by that search, respects the queue cap and current preferences, and never retries submitted/uncertain jobs. An all-failed or zero-match search cannot start unrelated old library jobs. It opens the employer's public ATS application URL. Automatic submission remains opt-in and limited to recognized forms; verification and unsupported portals retain the existing assisted workflow. It does not create missing adapters or silently invent answers.
 
 ## Performance
 

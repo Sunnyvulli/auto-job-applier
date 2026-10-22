@@ -1,32 +1,27 @@
-# ApplyPilot 0.7 — automatic job discovery
+# ApplyPilot 0.7.1 — autofill and resume-upload fixes
 
-## What changed
+## What was fixed
 
-- Added **Discover jobs** with automatic search across 37 catalog employers plus saved sources.
-- Added required country and optional city filters, per-source coverage/error reports and optional 15-minute discovery while open.
-- Added **Find & apply**, which starts a bounded application queue restricted to the current search results.
-- Preserved structured employer country data and excluded ambiguous free-text country/state abbreviations.
-- Added a [step-by-step user guide](https://github.com/Sunnyvulli/auto-job-applier/blob/main/docs/USER_GUIDE.md), troubleshooting and upgrade instructions.
+Chromium could open before the application controls rendered, leaving the form untouched. Some hidden resume/cover-letter inputs were labelled only **Attach** and were missed. An upload failure could interrupt the remaining contact fields. Some accessible identity labels were not recognized, and custom dropdowns could remain blocked after manual selection.
 
-## How to use it
+The browser now waits up to 12 seconds for controls, reads accessible labels/standard identity aliases, identifies Attach uploads from explicit input identity, and reports upload problems while continuing other fields. Activity shows field and document-selection counts. Supported React-select selections can be recognized after manual choice; the app does not automatically choose unknown answers. Profile now has optional explicit **First Name** and **Last Name** values.
 
-1. In **Preferences**, save roles such as `Data Engineer, Machine Learning Engineer` and countries such as `United States, India`.
-2. Leave **Cities** blank unless you want a narrower search; review skill/seniority filters and queue size.
-3. In **Discover jobs**, choose **Find jobs** to import and review, or **Find & apply** to search and start the assistant.
-4. Automatic submission still uses the existing opt-in Overview setting and supported-form rules.
+## How to use the fix
 
-## Upgrade
+1. Export a backup in **Diagnostics**, stop the queue and close ApplyPilot.
+2. Install the updated Full/Lite installer and reopen it. No extra dependency or paid service is required. Existing profile/history normally remain in the data folder.
+3. Open **Profile**, check your saved values and optionally set exact **First Name / Last Name**, then **Save profile**. Changing profile values invalidates affected draft approvals/memories until reviewed.
+4. Select a job in **Job library → Prepare PDFs**, inspect the resume, and start it through the application queue.
+5. Let the form load. If it opens on a description page, open the application form in that same tab, then **Overview → Resume browser**.
+6. Check **Activity** and the attachment filename in the browser. A document-selection count is not a submission receipt.
+7. Select any required custom dropdowns manually, then Resume. Unknown answers and verification still need your input.
 
-Export a backup in **Diagnostics**, close ApplyPilot, install the latest Full/Lite edition and reopen. No new API key, paid service or separate Python installation is needed for discovery. Existing saved profiles/preferences/history normally remain in the data folder. Add the new country preference before using discovery. See the [upgrade instructions](https://github.com/Sunnyvulli/auto-job-applier/blob/main/docs/USER_GUIDE.md#9-upgrade-and-back-up).
+See the [complete user guide](https://github.com/Sunnyvulli/auto-job-applier/blob/main/docs/USER_GUIDE.md#autofill-or-resume-upload-is-empty).
 
-## What was verified
+## Verification
 
-For the discovery code released as build-15: **132 tests plus five desktop checks passed**. Both installer editions passed installed-app checks on Windows Server 2022/2025 and Windows 11 ARM emulation. A read-only live search scanned 16,570 listings from all 37 catalog feeds and imported 123 matches for Data Engineer/Machine Learning Engineer in US/India, with seniority exclusion off. A live optional-city check found UK/London engineer roles. Counts are observations, not promised results.
-
-The subsequent guide/release-process change is documentation/workflow only; no application code or installed binary changed. Documentation links, control labels and workflow structure were reviewed. It does not constitute a new Windows installation test.
+Local browser regressions cover delayed forms, hidden Attach uploads, accessible labels/identity aliases, upload-error isolation, ambiguous files, custom-dropdown selections and native selects. The complete local suite passed **141 tests**, with five display-dependent desktop checks skipped locally. The release workflow separately gates installers on Linux/browser/desktop checks and Full/Lite installed-app checks on Windows Server 2022/2025; an additional ARM emulation job reports its own result. The installed-app smoke check now tests synthetic field filling and a hidden resume file input. Consult the linked Actions run for the actual results of this build; this text is not proof that a pending check passed.
 
 ## Remaining limits
 
-Coverage is a finite catalog plus saved sources, not every company or portal. Country-unknown listings are excluded. Automatic submission is opt-in for recognized Lever/Greenhouse forms; other forms and verification can need help. No CAPTCHA bypass is included. Real employer submissions, account creation and the user's live inbox remain unvalidated. Windows 11 ARM remains experimental.
-
-Future releases attach the user guide and these release notes alongside installers. Version history is in [CHANGELOG.md](https://github.com/Sunnyvulli/auto-job-applier/blob/main/CHANGELOG.md).
+This release does not demonstrate a completed live employer application. It cannot fill every portal or arbitrary tab, choose unknown work-authorization/sponsorship answers, resolve all custom controls, fill external embedded frames or bypass CAPTCHA/2FA. Upload failures still need review. Windows 11 x64 is the laptop target; ARM remains experimental. For a remaining failure, provide the public job URL, app version/edition and Activity message.

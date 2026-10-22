@@ -20,7 +20,7 @@ from .system import capabilities
 from .theme import apply_style, UI_FONT, CODE_FONT
 from .tailoring import FACTS
 
-FIELDS=['name','email','phone','location','linkedin','website','skills','summary','experience','projects','education']
+FIELDS=['name','first_name','last_name','email','phone','location','linkedin','website','skills','summary','experience','projects','education']
 
 class App:
     def __init__(self,root,folder=None):
@@ -33,7 +33,7 @@ class App:
         self.active_draft_job=None;self.busy_count=0;self.offset=0;self.total_jobs=0;self.filter_timer=None
         self.queued_ids=self.store.setting('planned_queue',[]);self.pages={};self.nav={};self.current_page=''
         self.status=tk.StringVar(value='Welcome. Import your resume once, then set your job preferences.')
-        root.title('ApplyPilot 0.7');root.geometry(f'{min(1240,root.winfo_screenwidth()-60)}x{min(820,root.winfo_screenheight()-90)}');root.minsize(min(960,root.winfo_screenwidth()-40),min(640,root.winfo_screenheight()-60))
+        root.title('ApplyPilot 0.7.1');root.geometry(f'{min(1240,root.winfo_screenwidth()-60)}x{min(820,root.winfo_screenheight()-90)}');root.minsize(min(960,root.winfo_screenwidth()-40),min(640,root.winfo_screenheight()-60))
         self.colors=apply_style(root,self.store.setting('theme','light'))
         root.grid_rowconfigure(0,weight=1);root.grid_columnconfigure(1,weight=1)
         c=self.colors
@@ -45,7 +45,7 @@ class App:
         self.nav_area=tk.Frame(self.sidebar,bg=c['nav']);self.nav_area.pack(fill='x')
         footer=tk.Frame(self.sidebar,bg=c['nav']);footer.pack(side='bottom',fill='x',padx=20,pady=22)
         tk.Label(footer,text='LOCAL  /  PRIVATE  /  FREE',font=(UI_FONT,8,'bold'),bg=c['nav'],fg=c['navtext']).pack(anchor='w')
-        tk.Label(footer,text='Version 0.7 preview',font=(UI_FONT,9),bg=c['nav'],fg=c['navtext']).pack(anchor='w',pady=(6,0))
+        tk.Label(footer,text='Version 0.7.1 preview',font=(UI_FONT,9),bg=c['nav'],fg=c['navtext']).pack(anchor='w',pady=(6,0))
         shell=ttk.Frame(root,padding=(24,18,24,12));shell.grid(row=0,column=1,sticky='nsew');shell.grid_rowconfigure(1,weight=1);shell.grid_columnconfigure(0,weight=1)
         top=ttk.Frame(shell);top.grid(row=0,column=0,sticky='ew',pady=(0,18))
         self.page_title=tk.StringVar(value='Overview');ttk.Label(top,textvariable=self.page_title,style='Section.TLabel').pack(side='left')
@@ -102,6 +102,7 @@ class App:
     def profile_tab(self):
         t=self.tab('1  Profile')
         ttk.Label(t,text='Use only information you can stand behind. Blank fields stay unanswered.').pack(anchor='w',pady=5)
+        ttk.Label(t,text='First name / Last name are optional explicit form values. Leave blank to use the existing full-name split.',style='Muted.TLabel',wraplength=700).pack(anchor='w',pady=4)
         pane=ttk.Frame(t);pane.pack(fill='both',expand=True)
         canvas=tk.Canvas(pane,highlightthickness=0,background='#f4f6fa');scroll=ttk.Scrollbar(pane,orient='vertical',command=canvas.yview);inner=ttk.Frame(canvas)
         inner.bind('<Configure>',lambda e:canvas.configure(scrollregion=canvas.bbox('all')));window=canvas.create_window((0,0),window=inner,anchor='nw');inner.grid_columnconfigure(1,weight=1);canvas.bind('<Configure>',lambda e:canvas.itemconfigure(window,width=e.width));canvas.configure(yscrollcommand=scroll.set);canvas.pack(side='left',fill='both',expand=True);scroll.pack(side='right',fill='y')

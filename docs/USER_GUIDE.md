@@ -1,6 +1,6 @@
 # ApplyPilot user guide
 
-Applies to **0.7**. Start here after installation. Read [release notes](RELEASE_NOTES.md) when upgrading and [version history](../CHANGELOG.md) for previous changes.
+Applies to **0.7.1**. Start here after installation. Read [release notes](RELEASE_NOTES.md) when upgrading and [version history](../CHANGELOG.md) for previous changes.
 
 ## 1. Install and open
 
@@ -14,9 +14,10 @@ Windows 11 x64 is the supported laptop target. ARM emulation is experimental. In
 
 1. Open **Profile** and import your PDF, DOCX or text resume, or enter your details manually.
 2. Review the extracted name, email, skills, summary, experience, projects and education. Scanned PDFs need text extraction/OCR before importing.
-3. If you imported a PDF, decide whether to keep the original PDF for uploads. This preserves its formatting.
-4. Save your profile. Name and a valid email address are required to start an application queue.
-5. Add verified reusable question/answer pairs if useful. Use the fact bank for facts such as salary, start date or US work authorization. Leave unknown facts blank.
+3. Optional **First Name** and **Last Name** fields let you specify the exact values for separate name fields. Leave them blank to keep the previous full-name split. Saving changed profile values invalidates earlier draft approvals and scoped memories until reviewed.
+4. If you imported a PDF, decide whether to keep the original PDF for uploads. This preserves its formatting.
+5. Save your profile. Name and a valid email address are required to start an application queue.
+6. Add verified reusable question/answer pairs if useful. Use the fact bank for facts such as salary, start date or US work authorization. Leave unknown facts blank.
 
 Resume import does not prove that every extracted section is correct. Check it before applying. Do not put passwords or verification codes into profile answers.
 
@@ -80,6 +81,20 @@ For later runs, **Discover jobs → Find & apply** performs discovery and starts
 
 To enable unattended submission on supported forms, check **Submit supported forms automatically using my saved answers** on Overview. This is opt-in and limited to recognized Lever/Greenhouse forms. Other portals use assisted completion. Unknown questions, registration, custom controls and verification can still pause the browser. An all-failed or zero-match search cannot start unrelated old library jobs.
 
+
+### Autofill or resume upload is empty
+
+1. Check **Profile → Save profile** after importing or editing your details. Importing into the editor alone is not saving.
+2. Select a job in **Job library**, choose **Prepare PDFs**, and inspect the documents. If using an original resume, its selected file must still exist.
+3. Start the application from ApplyPilot's queue. It fills the browser tab opened for that job; it does not automatically fill arbitrary tabs you open yourself.
+4. Allow up to 12 seconds for a delayed form to appear. If you are still on the job-description page, open its application form in the **same tab**, then click **Overview → Resume browser**.
+5. Check **Activity** for `Filled … fields; selected … documents for upload`. Selection counts mean that the browser accepted a file selection, not that an employer accepted the application. Check the attachment filename in the browser.
+6. In 0.7.1, hidden resume/cover-letter inputs labelled **Attach** are identified using their explicit input identity. An unclear upload type, missing file or upload failure is reported for manual review while other fields keep filling.
+7. Select required custom dropdowns such as country/city manually, then **Resume browser**. Supported React-select chosen values can be recognized; merely typing into a search field is not selecting an option. Unsupported controls and external embedded forms still require manual completion.
+8. Keep automatic submission off while checking the first application after upgrading. Uploading a resume does not imply submission.
+
+If the exact form still does not fill, report its public job URL, the app version/edition, Activity message, and which fields/uploads remained empty. Include a redacted screenshot if useful; do not share passwords, verification codes or private resume contents in a public issue.
+
 ## 7. Resolve a pause and teach an answer
 
 1. Keep the application browser open and read the status message/Activity entry.
@@ -139,6 +154,7 @@ To restore, stop all work and use **Diagnostics → Restore backup**. Restore re
 | Zero newly imported jobs | Matches may already be in the library. Check total matches and search Job library. |
 | A company feed failed | Read its source report entry. Other sources continue; a retired or changed board may need a corrected source or software fix. |
 | Browser will not open | Check **Diagnostics** and **Preferences → Application browser**. Full includes Chromium; Lite needs installed Edge/Chrome. Stop existing work before retrying. |
+| Autofill/upload stays empty | Follow the dedicated troubleshooting steps above; save Profile, prepare PDFs, use the queue tab and read Activity. |
 | Resume missing or wrong | Check the selected original PDF still exists, the job-specific PDF toggle and draft approvals; regenerate and inspect documents. |
 | Application pauses repeatedly | Correct the identified field and Resume before advancing. Custom controls, changed portal workflows and verification may need manual completion or a software fix. |
 | Submission outcome unclear | Check the employer portal and confirmation email; keep the job uncertain until verified. Do not reset it just to force a retry. |
@@ -148,5 +164,7 @@ To restore, stop all work and use **Diagnostics → Restore backup**. Restore re
 For an issue report, provide the app version/edition, Windows version, action taken, expected/actual result, relevant Activity text, source/portal domain and reproduction steps. Share a redacted screenshot if useful. Exclude passwords, codes, tokens, resume contents and private inbox data. A bug report does not automatically send diagnostics or personal files.
 
 ## Validation limits
+
+The 0.7.1 autofill changes have browser regression checks for delayed rendering, Attach-labelled hidden inputs, accessible labels/identity aliases, upload-error isolation, ambiguous uploads and manual custom-dropdown selection. Installed-app checks exercise autofill and hidden uploads with synthetic data. These are controlled tests, not a completed live employer application. Check each release workflow for its actual installer results.
 
 For the 0.7 discovery release, 132 tests passed plus five desktop checks; Full/Lite installed-app checks passed on Windows Server 2022/2025 and Windows 11 ARM emulation. A live read-only discovery run scanned 16,570 listings and found 123 matches for Data Engineer/Machine Learning Engineer in US/India with seniority exclusion off. Counts change over time. These checks do not prove universal portal support. Real employer submissions, your live inbox and account registration remain unvalidated.

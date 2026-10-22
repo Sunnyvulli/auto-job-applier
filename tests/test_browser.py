@@ -228,3 +228,75 @@ def test_snapshot_excludes_secrets_external_frames_and_duplicates(page):
     fields=snapshot(page)
     assert set(fields)=={'years of python experience'}
     assert fields['years of python experience']['answer']=='' and not fields['years of python experience']['valid']
+
+
+def test_greenhouse_attach_label_uses_upload_identity(page,tmp_path):
+    (tmp_path/'resume.pdf').write_bytes(b'resume');(tmp_path/'cover-letter.pdf').write_bytes(b'cover')
+    page.set_content('''<div><span>Resume/CV *</span><label for=resume>Attach</label><input id=resume type=file hidden></div>
+    <div><span>Cover letter</span><label for=cover_letter>Attach</label><input id=cover_letter type=file hidden></div>''')
+    assert not fill_page(page,{},tmp_path)
+    assert page.locator('#resume').evaluate('e=>e.files[0]?.name')=='resume.pdf'
+    assert page.locator('#cover_letter').evaluate('e=>e.files[0]?.name')=='cover-letter.pdf'
+
+
+def test_accessible_labels_and_standard_field_aliases(page,tmp_path):
+    page.set_content('''<span id=first-label>First Name *</span><input aria-labelledby=first-label>
+    <label>E-mail Address (required)<input type=email></label>
+    <label>LinkedIn Profile URL<input></label>
+    <input name=last_name autocomplete=family-name>
+    <label>Referrer's email<input type=email name=referrer_email></label>''')
+    fill_page(page,{'name':'Alex Morgan Lee','first_name':'Alex Morgan','last_name':'Lee','email':'alex@example.com','linkedin':'https://linkedin.com/in/alex'},tmp_path)
+    assert [e.input_value() for e in page.locator('input').all()]==['Alex Morgan','alex@example.com','https://linkedin.com/in/alex','Lee','']
+
+
+def test_failed_upload_does_not_prevent_contact_fill(page,tmp_path):
+    page.set_content('<label>Resume<input type=file></label><label>Email<input></label>')
+    missing=fill_page(page,{'email':'alex@example.com'},tmp_path)
+    assert page.locator('input[type=email],input:not([type])').input_value()=='alex@example.com'
+    assert any('upload' in x.lower() for x in missing)
+
+
+def test_delayed_application_form_fills_before_pause(page,tmp_path):
+    from applypilot.core import Store
+    from applypilot.browser import BrowserWorker
+    store=Store(tmp_path/'db');jid=store.add(dict(url='https://jobs.lever.co/acme/1/apply',company='Acme',title='Role'))
+    (tmp_path/'resume.pdf').write_bytes(b'resume')
+    page.set_content('''<main id=root>Loading application...</main><script>setTimeout(()=>{
+    document.getElementById('root').innerHTML='<label>Full name<input required></label><label for=resume>Attach</label><input id=resume type=file hidden>';
+    },400)</script>''')
+    worker=BrowserWorker(store,lambda _:None);seen=[]
+    def pause(*a):
+        seen.append((page.locator('input:not([type])').input_value() if page.locator('input:not([type])').count() else '',page.locator('#resume').evaluate('e=>e.files.length') if page.locator('#resume').count() else 0))
+        return False
+    worker.pause=pause
+    worker.process(page,jid,store.job(jid),{'name':'Alex Morgan'},tmp_path,False)
+    assert seen==[('Alex Morgan',1)]
+
+
+@pytest.mark.parametrize('selected',[False,True])
+def test_custom_dropdown_manual_selection_can_resume(page,tmp_path,selected):
+    value='<div class=select__single-value>United States</div>' if selected else ''
+    page.set_content('<div class=select__container><label>Country<input role=combobox aria-required=true></label>'+value+'</div>')
+    missing=fill_page(page,{'answers':{'Country':'United States'}},tmp_path)
+    assert bool(missing) is not selected
+    # Do not treat typing a value as an actual custom-dropdown selection.
+    assert page.locator('input').input_value()==''
+
+
+def test_custom_dropdown_does_not_borrow_another_fields_selection(page,tmp_path):
+    page.set_content('''<div class=application-container><label>Country<input role=combobox aria-required=true></label>
+    <div class=select__container><label>Other<input role=combobox></label><div class=select__single-value>Selected elsewhere</div></div></div>''')
+    assert 'Country' in fill_page(page,{},tmp_path)
+
+
+def test_native_select_with_explicit_combobox_role_still_fills(page,tmp_path):
+    page.set_content('<label>Work authorization<select role=combobox aria-required=true><option value="">Choose</option><option>Yes</option></select></label>')
+    assert not fill_page(page,{'answers':{'Work authorization':'Yes'}},tmp_path)
+    assert page.locator('select').input_value()=='Yes'
+
+
+def test_ambiguous_upload_is_left_for_review(page,tmp_path):
+    (tmp_path/'resume.pdf').write_bytes(b'resume')
+    page.set_content('<label>Resume or cover letter<input type=file></label>')
+    assert any('unclear' in x for x in fill_page(page,{},tmp_path))
+    assert page.locator('input').evaluate('e=>e.files.length')==0

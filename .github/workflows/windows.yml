@@ -108,4 +108,4 @@ jobs:
           if [ "$branch_head" != "${{ github.sha }}" ]; then exit 0; fi
           cd installer-output
           sha256sum *.exe > SHA256SUMS.txt
-          gh release create "build-${{ github.run_number }}" *.exe SHA256SUMS.txt ../docs/USER_GUIDE.md ../docs/RELEASE_NOTES.md --target "${{ github.sha }}" --title "ApplyPilot 0.7 preview" --notes-file ../docs/RELEASE_NOTES.md
+          gh release create "build-${{ github.run_number }}" *.exe SHA256SUMS.txt ../docs/USER_GUIDE.md ../docs/RELEASE_NOTES.md --target "${{ github.sha }}" --title "ApplyPilot 0.7.1 preview" --notes-file ../docs/RELEASE_NOTES.md

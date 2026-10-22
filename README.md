@@ -1,4 +1,4 @@
-# ApplyPilot 0.7
+# ApplyPilot 0.7.1
 
 A free local Windows workspace for finding jobs, preparing applications and tracking replies. A native sidebar dashboard, light/dark themes and preference-based queues reduce repeated entry. No paid AI API, hosted server or CAPTCHA-solving subscription is configured.
 
@@ -12,6 +12,10 @@ Install and open ApplyPilot. No Python or Node installation is required. Both ed
 ## Help and release notes
 
 Read the [step-by-step user guide](docs/USER_GUIDE.md) for setup, daily use, learning, email, upgrades and troubleshooting. See [current release notes](docs/RELEASE_NOTES.md) and [version history](CHANGELOG.md). Each future upgrade or fix should update the affected instructions and release notes.
+
+## Autofill / upload fix in 0.7.1
+
+The browser now waits up to 12 seconds for application controls, reads accessible labels and standard identity-field aliases, and recognizes hidden resume/cover-letter inputs labelled only **Attach** from their explicit upload identity. A missing/failed upload is reported while other fields continue filling. Activity reports filled-field/document-selection counts. Profile has optional **First Name** and **Last Name** overrides; use them when the full-name split is unsuitable. Required custom dropdowns still need manual selection, but supported React-select selections can now be recognized on Resume. See the [updated usage steps](docs/USER_GUIDE.md#autofill-or-resume-upload-is-empty).
 
 ## A shorter daily workflow
 

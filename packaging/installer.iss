@@ -1,4 +1,4 @@
-#define MyAppVersion "0.7.0"
+#define MyAppVersion "0.7.1"
 #ifndef Variant
 #define Variant "Full"
 #endif

@@ -60,7 +60,17 @@ def smoke_test(report):
             checks.append('backup export and restore')
             with sync_playwright() as p:
                 browser=launch_context(p.chromium,folder,headless=True)
-                page=browser.new_page();page.set_content('<h1>Application browser works</h1>');assert page.locator('h1').inner_text()=='Application browser works';browser.close()
+                page=browser.new_page();page.set_content('<h1>Application browser works</h1>');assert page.locator('h1').inner_text()=='Application browser works'
+                from applypilot.browser import fill_page
+                page.set_content('<span id=given>First Name *</span><input aria-labelledby=given><label>Email<input type=email></label><label for=resume>Attach</label><input id=resume type=file hidden>')
+                progress={}
+                assert not fill_page(page,{'name':'Alex Morgan','email':'smoke@example.com'},dest,progress)
+                assert page.locator('input').nth(0).input_value()=='Alex'
+                assert page.locator('input[type=email]').input_value()=='smoke@example.com'
+                assert page.locator('#resume').evaluate('e=>e.files[0].name')=='resume.pdf'
+                assert progress=={'fields':2,'uploads':1}
+                checks.append('packaged autofill and hidden Attach resume input')
+                browser.close()
             checks.append('application browser launch')
             from google_auth_oauthlib.flow import InstalledAppFlow
             checks.append('OAuth library import')

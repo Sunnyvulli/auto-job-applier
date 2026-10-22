@@ -3,6 +3,7 @@ import json
 import re
 import threading
 import queue
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 from .core import documents, now
@@ -16,7 +17,7 @@ def known_portal(url):
 
 def answers(profile):
     name = profile.get('name','').split(' ',1)
-    result = {'first name':name[0] if name else '', 'last name':name[1] if len(name)>1 else '',
+    result = {'first name':profile.get('first_name') or (name[0] if name else ''), 'last name':profile.get('last_name') or (name[1] if len(name)>1 else ''),
               'full name':profile.get('name',''),'name':profile.get('name',''),'email':profile.get('email',''),
               'email address':profile.get('email',''),'phone':profile.get('phone',''),'phone number':profile.get('phone',''),
               'linkedin':profile.get('linkedin',''),'linkedin profile':profile.get('linkedin',''),
@@ -26,7 +27,7 @@ def answers(profile):
     return result
 
 def normalize(label):
-    return re.sub(r'\s+', ' ', re.sub(r'[*:]+$', '',label.strip())).strip().lower()
+    return re.sub(r'\s+', ' ', re.sub(r'[*✱∗⁎✳:]+$', '',label.strip())).strip().lower()
 
 def same_origin(left,right):
     try:
@@ -39,7 +40,60 @@ def form_frames(page):
     return [frame for frame in page.frames if frame==page.main_frame or same_origin(frame.url,page.url)]
 
 def field_label(el):
-    return el.evaluate('''e => { const l=[...(e.labels||[])].map(x=>{const c=x.cloneNode(true);c.querySelectorAll('input,select,textarea,button').forEach(n=>n.remove());return c.textContent;}).join(' '); return l || e.getAttribute('aria-label') || e.getAttribute('placeholder') || e.name || e.id || ''; }''')
+    return el.evaluate(r"""e => {
+        const text=n=>{const c=n.cloneNode(true);c.querySelectorAll('input,select,textarea,button').forEach(n=>n.remove());return c.textContent.trim();};
+        const labels=[...(e.labels||[])].map(text).filter(Boolean).join(' ');
+        const labelled=(e.getAttribute('aria-labelledby')||'').split(/\s+/).map(id=>e.ownerDocument.getElementById(id)).filter(Boolean).map(text).join(' ');
+        return labels || labelled || e.getAttribute('aria-label') || e.getAttribute('placeholder') || e.name || e.id || '';
+    }""")
+
+
+def profile_field_key(label):
+    # Bounded aliases for ordinary identity fields; never fuzzy-match questions.
+    label=re.sub(r'([a-z])([A-Z])',r'\1 \2',label)
+    key=normalize(re.sub(r'\s*\((?:required|optional)\)\s*$','',normalize(label),flags=re.I))
+    key=re.sub(r'[_-]+',' ',key);key=re.sub(r'\s+',' ',key).strip()
+    key=re.sub(r'\blinked in\b','linkedin',key)
+    aliases={'firstname':'first name','given name':'first name','given names':'first name',
+             'lastname':'last name','family name':'last name','surname':'last name',
+             'fullname':'full name','your name':'full name','e mail':'email','e mail address':'email address',
+             'emailaddress':'email address','telephone':'phone','mobile phone':'phone',
+             'linkedin profile url':'linkedin','linkedinprofile':'linkedin','personal website':'website',
+             'portfolio website':'website'}
+    return aliases.get(key,key)
+
+
+def upload_kind(el):
+    # A real Greenhouse file input may be hidden and labelled only "Attach".
+    hints=[field_label(el),el.get_attribute('id') or '',el.get_attribute('name') or '',el.get_attribute('aria-label') or '']
+    kinds=set()
+    for hint in hints:
+        hint=re.sub(r'([a-z])([A-Z])',r'\1 \2',hint).lower()
+        hint=re.sub(r'[_-]+',' ',hint)
+        if re.search(r'\bcover\s*letter\b',hint):kinds.add('cover-letter')
+        if re.search(r'\b(?:resume|résumé|cv)\b|\bcurriculum\s+vitae\b',hint):kinds.add('resume')
+    return next(iter(kinds)) if len(kinds)==1 else None
+
+
+def wait_for_application_controls(page,timeout=12):
+    deadline=time.monotonic()+timeout
+    while True:
+        for frame in form_frames(page):
+            if frame.locator('input[type=file]').count():return True
+            for el in frame.locator('input:not([type=hidden]):not([type=submit]):not([type=button]),textarea,select,[role=combobox]').all():
+                if el.is_visible() and el.is_enabled():return True
+        if time.monotonic()>=deadline:return False
+        page.wait_for_timeout(200)
+
+
+def custom_selection_present(el):
+    # Read a chosen React-select value; typing into its search input is not a selection.
+    return el.evaluate("""e=>{
+        const container=e.closest('[class*=\"select__container\"],[class*=\"-container\"]');
+        if(!container || container.querySelectorAll('[role=combobox]').length!==1)return false;
+        return [...container.querySelectorAll('[class*=\"singleValue\"],[class*=\"single-value\"]')].some(n=>n.getBoundingClientRect().width>0 && n.textContent.trim());
+    }""")
+
 
 def radio_groups(page):
     result=[]
@@ -57,8 +111,10 @@ def radio_groups(page):
             result.append({'label':label,'options':options})
     return result
 
-def fill_page(page, profile, dest):
+def fill_page(page, profile, dest, report=None):
     mapping=answers(profile)
+    if report is None:report={}
+    report.update(fields=0,uploads=0)
     unresolved=[]
     from .learning import BLOCKED
     for group in radio_groups(page):
@@ -79,10 +135,19 @@ def fill_page(page, profile, dest):
             required=el.get_attribute('required') is not None or el.get_attribute('aria-required')=='true' or '*' in label
             key=normalize(label)
             if typ=='file':
-                target = dest / ('cover-letter.pdf' if 'cover' in key else 'resume.pdf')
-                if 'cover' in key or 'resume' in key or 'cv' in key:
-                    el.set_input_files(str(target))
-                elif required: unresolved.append(label or 'Unlabelled upload')
+                kind=upload_kind(el)
+                if not kind:
+                    unresolved.append((label or 'Unlabelled file')+' (upload type unclear; attach manually)');continue
+                target=dest/(kind+'.pdf')
+                if not target.is_file():
+                    unresolved.append(kind+' upload: prepared file is missing; prepare documents again');continue
+                try:
+                    el.set_input_files(str(target));report['uploads']+=1
+                except Exception:
+                    unresolved.append(kind+' upload failed; attach manually or retry after Resume')
+                continue
+            if el.get_attribute('role')=='combobox' and el.evaluate('e=>e.tagName')!='SELECT':
+                if required and not custom_selection_present(el):unresolved.append(label or 'Required custom dropdown: select an option manually')
                 continue
             if typ in {'password','checkbox','radio'}:
                 resolved=el.evaluate('e=>e.validity.valid') if typ=='radio' else el.is_checked() if typ=='checkbox' else bool(el.input_value())
@@ -91,6 +156,10 @@ def fill_page(page, profile, dest):
                     unresolved.append(group_label.strip() or label or typ)
                 continue
             value=mapping.get(key)
+            if value is None:
+                alias=profile_field_key(label)
+                basic={'first name','last name','full name','name','email','email address','phone','phone number','linkedin','linkedin profile','linkedin url','website'}
+                if alias in basic:value=mapping.get(alias)
             if value:
                 try:
                     if el.evaluate('e=>e.tagName')=='SELECT': el.select_option(label=value)
@@ -100,6 +169,7 @@ def fill_page(page, profile, dest):
                             unresolved.append(label+' (approved answer exceeds field length)');continue
                         el.fill(value)
                         if el.input_value()!=value:unresolved.append(label+' (form changed the approved answer)')
+                    report['fields']+=1
                 except Exception:
                     unresolved.append(label or 'Field could not be filled')
             elif required:
@@ -108,8 +178,8 @@ def fill_page(page, profile, dest):
                 except Exception: unresolved.append(label or 'Required control')
     for frame in form_frames(page):
         for el in frame.locator('[role=combobox][aria-required=true]').all():
-            if el.is_visible():
-                unresolved.append(el.get_attribute('aria-label') or 'Required custom dropdown: review manually')
+            if el.is_visible() and el.evaluate('e=>e.tagName')!='SELECT' and not custom_selection_present(el):
+                unresolved.append(field_label(el) or 'Required custom dropdown: review manually')
     return sorted(set(unresolved))
 
 class BrowserWorker:
@@ -184,6 +254,9 @@ class BrowserWorker:
         for step in range(25):
             if self.stop_event.is_set():return 'uncertain'
             if self.confirmed(page,baseline):return 'submitted'
+            if not wait_for_application_controls(page):
+                if not self.wait_for_help(page,jid,'No application fields loaded. Open the application form in this same tab, then Resume.'):return 'uncertain'
+                continue
             job=self.store.job(jid)
             current=self.store.setting('profile',profile)
             current_resume=resume_signature()
@@ -196,7 +269,9 @@ class BrowserWorker:
             effective=approved_profile(self.store,profile,job)
             # Explicit job approvals take precedence over automatically remembered answers.
             overrides={**{normalize(k):str(v) for k,v in effective.get('answers',{}).items()},**learned,**(current_version or {}).get('approved_answers',{})}
-            missing=fill_page(page,dict(effective,answers=overrides),dest)
+            progress={}
+            missing=fill_page(page,dict(effective,answers=overrides),dest,progress)
+            self.notify(f"Filled {progress['fields']} fields; selected {progress['uploads']} documents for upload. {len(missing)} fields/uploads need review.")
             fresh=set(used)-used_memory
             if fresh:record_use(self.store,fresh);used_memory.update(fresh)
             self.used_memory=used

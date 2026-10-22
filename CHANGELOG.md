@@ -1,5 +1,15 @@
 # ApplyPilot version history
 
+## 0.7.1 — autofill and resume-upload fixes
+
+- Wait for delayed application controls before filling and matching saved answers.
+- Read aria-labelledby labels, ordinary identity-field aliases and optional explicit name parts.
+- Recognize hidden resume/cover-letter inputs labelled Attach using explicit input identity; hold ambiguous uploads for review.
+- Continue filling contact fields after a missing/failed upload; report field/document-selection counts.
+- Recognize supported manually selected React-select values on Resume while keeping custom choices manual.
+- Extend packaged-app smoke checks to fill synthetic identity fields and select a hidden Attach resume input.
+- Updated troubleshooting and upgrade guidance. No live employer submission is claimed.
+
 ## 0.7 — automatic discovery
 
 - Discover jobs by roles/countries and optional cities across the employer catalog plus saved sources.

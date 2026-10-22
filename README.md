@@ -9,6 +9,10 @@ A free local Windows workspace for finding jobs, preparing applications and trac
 
 Install and open ApplyPilot. No Python or Node installation is required. Both editions install for your Windows user without administrator access. Internet is required for jobs and email. The installers are unsigned; Windows can show a reputation warning. Close the app before upgrading. Profile/history stay under `%LOCALAPPDATA%\ApplyPilot`, separately from application binaries.
 
+## Help and release notes
+
+Read the [step-by-step user guide](docs/USER_GUIDE.md) for setup, daily use, learning, email, upgrades and troubleshooting. See [current release notes](docs/RELEASE_NOTES.md) and [version history](CHANGELOG.md). Each future upgrade or fix should update the affected instructions and release notes.
+
 ## A shorter daily workflow
 
 1. **Profile:** import a PDF, DOCX or text resume, review the extracted sections, then save. For PDFs, optionally keep the original file and formatting for applications. You can also edit the profile manually. Resume extraction is heading/contact based and requires review; scanned files need OCR first.

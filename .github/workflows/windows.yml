@@ -94,6 +94,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: ApplyPilot-Windows-windows-2022
@@ -107,4 +108,4 @@ jobs:
           if [ "$branch_head" != "${{ github.sha }}" ]; then exit 0; fi
           cd installer-output
           sha256sum *.exe > SHA256SUMS.txt
-          gh release create "build-${{ github.run_number }}" *.exe SHA256SUMS.txt --target "${{ github.sha }}" --title "ApplyPilot 0.7 preview" --notes "Automatic employer-feed discovery by role and country, optional city filters, source coverage reports and Find & apply. Existing document and answer-learning workflows retained. Both editions tested on Windows Server 2022 and 2025. ARM is experimental; check the ARM job result. See README for supported behavior and live-validation limits."
+          gh release create "build-${{ github.run_number }}" *.exe SHA256SUMS.txt ../docs/USER_GUIDE.md ../docs/RELEASE_NOTES.md --target "${{ github.sha }}" --title "ApplyPilot 0.7 preview" --notes-file ../docs/RELEASE_NOTES.md

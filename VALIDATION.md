@@ -53,3 +53,8 @@ Recovery tests cover data/history restoration, preservation of submitted-job pro
 Exact CI results and release assets remain authoritative. Fixture tests still do not validate real employer submissions, real account registrations, live Gmail consent or universal portal compatibility.
 
 The first 0.4 Windows run exposed a desktop-test lifecycle issue: a second Tcl/Tk interpreter could not initialize its theme files after the first was destroyed. GUI tests now share one interpreter across separate windows and cancel scheduled callbacks on teardown, matching the single-instance application design. Windows installation checks still run in fresh application processes.
+
+
+## 0.5 job-specific drafts
+
+Added local resume/cover-letter proposals, a verified fact bank, exact per-job custom-answer approvals, evidence/gap display and editable diffs. No remote model service or paid dependency was added. Tests cover supported-fact selection, preservation of employment/education, no insertion of missing technologies, approval gates, per-job isolation, sensitive-question handoff, country and total-versus-specific experience boundaries, source/profile/job/fact invalidation, optimistic revision conflicts, backup portability with disabled approvals, legacy backup compatibility and PDF output. Browser fixtures check approval before filling and explicit handling of field length limits. A desktop test exercises the draft editor, fact bank, resume approval, answer approval/revocation and stale-context rejection. Packaged-app checks additionally generate reviewed job-specific documents before backup/restore. Exact CI outcomes remain authoritative.

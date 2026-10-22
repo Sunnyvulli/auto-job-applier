@@ -10,3 +10,4 @@ installer-output/
 browser-session/
 .env
 credentials*
+screenshots/

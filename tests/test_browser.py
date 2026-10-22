@@ -167,3 +167,24 @@ def test_queue_reloads_profile_before_each_job(tmp_path,monkeypatch):
     monkeypatch.setattr(worker,'process',process);worker.run(ids,auto=False)
     assert names==['Old Name','New Name']
     assert all(store.job(jid)['status']=='submitted' for jid in ids)
+
+
+def test_long_approved_answer_is_not_silently_truncated(page,tmp_path):
+    page.set_content('<label>Custom question<input maxlength=4 required></label>')
+    missing=fill_page(page,{'answers':{'Custom question':'Too long'}},tmp_path)
+    assert page.locator('input').input_value()==''
+    assert 'field length' in missing[0]
+
+
+def test_job_scoped_answer_requires_approval_before_fill(page,tmp_path):
+    from applypilot.core import Store
+    from applypilot.tailoring import generate_draft,context_hash,save_draft,approved_profile
+    store=Store(tmp_path/'data');p={'name':'Test User','email':'test@example.com','skills':'Python','projects':'Built a Python pipeline.'};store.save_setting('profile',p)
+    jid=store.add(dict(url='https://example.com/job',title='Engineer',company='Acme',description='Python pipelines'));job=store.job(jid)
+    q='Describe your Python experience';draft=generate_draft(store,p,job,[q]);save_draft(store,jid,draft,context_hash(store,p,job))
+    page.set_content('<label>Describe your Python experience<textarea required></textarea></label>')
+    assert fill_page(page,approved_profile(store,p,job),tmp_path)
+    assert page.locator('textarea').input_value()==''
+    draft['approved_answers']={q.lower():draft['questions'][q]['answer']};save_draft(store,jid,draft,context_hash(store,p,job))
+    assert not fill_page(page,approved_profile(store,p,job),tmp_path)
+    assert page.locator('textarea').input_value()=='Built a Python pipeline.'

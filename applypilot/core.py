@@ -43,6 +43,7 @@ class Store:
             CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, job_id TEXT, kind TEXT, detail TEXT, at TEXT);
             CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY, job_id TEXT, sender TEXT, subject TEXT, body TEXT, stage TEXT, at TEXT);
             ''')
+            c.execute('CREATE TABLE IF NOT EXISTS drafts(job_id TEXT PRIMARY KEY, payload TEXT NOT NULL, context_hash TEXT NOT NULL, updated TEXT NOT NULL)')
             c.executescript('CREATE INDEX IF NOT EXISTS jobs_updated ON jobs(updated DESC,id); CREATE INDEX IF NOT EXISTS jobs_status_updated ON jobs(status,updated DESC); CREATE INDEX IF NOT EXISTS messages_time ON messages(at DESC);')
             c.execute("UPDATE jobs SET status='uncertain', note='Interrupted session: check portal before retrying.' WHERE status='running'")
     @contextmanager
@@ -124,7 +125,7 @@ def _http_session():
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
     if not hasattr(_http_local,'session'):
-        session=requests.Session();session.headers['User-Agent']='ApplyPilot/0.4 personal job assistant'
+        session=requests.Session();session.headers['User-Agent']='ApplyPilot/0.5 personal job assistant'
         adapter=HTTPAdapter(pool_connections=4,pool_maxsize=4,max_retries=Retry(total=2,backoff_factor=.5,status_forcelist=[429,502,503,504],allowed_methods=frozenset(['GET']),respect_retry_after_header=False))
         session.mount('https://',adapter);_http_local.session=session
     return _http_local.session
@@ -169,13 +170,19 @@ def documents(store, profile, job):
         raise ValueError('Save your name and email in Profile first.')
     from .sources import hydrate_job
     job=hydrate_job(store,job)
+    from .tailoring import current_draft,load_draft
+    draft=current_draft(store,profile,job);saved=load_draft(store,job['id'])
+    if saved and not draft and saved['payload'].get('approved_resume'):raise ValueError('Your reviewed job draft is outdated. Open Tailor application to review it again or clear it.')
+    reviewed=draft if draft and draft.get('approved_resume') else None
+    base_profile=profile
+    if reviewed and reviewed.get('use_tailored'):profile=dict(profile,**reviewed['resume'])
     dest = store.folder / 'documents' / job['id']
     dest.mkdir(parents=True, exist_ok=True)
-    source=store.setting('resume_pdf')
+    source=None if reviewed and reviewed.get('use_tailored') else store.setting('resume_pdf')
     source_path=Path(source) if source else None
     if source_path and not source_path.is_file():raise ValueError('Your selected original resume PDF is missing. Reimport it in Profile before preparing or applying.')
     source_hash=hashlib.sha256(source_path.read_bytes()).hexdigest() if source_path and source_path.is_file() else None
-    fingerprint=hashlib.sha256(json.dumps({'template_version':3,'profile':profile,'job':{k:job.get(k,'') for k in ('title','company','description','url')},'source_hash':source_hash},sort_keys=True).encode()).hexdigest()
+    fingerprint=hashlib.sha256(json.dumps({'template_version':5,'reviewed':{k:reviewed[k] for k in ('resume','cover_letter','use_tailored')} if reviewed else None,'profile':profile,'job':{k:job.get(k,'') for k in ('title','company','description','url')},'source_hash':source_hash},sort_keys=True).encode()).hexdigest()
     manifest_path=dest/'manifest.json'
     if manifest_path.exists():
         try:
@@ -192,6 +199,7 @@ def documents(store, profile, job):
     if evidence['skills']: letter += ['Relevant skills from my background include '+', '.join(evidence['skills'])+'.']
     if profile.get('projects'): letter += [profile['projects']]
     letter += ['Thank you for considering my application. I would welcome the opportunity to discuss my experience.', 'Sincerely,',profile['name']]
+    if reviewed:letter=[base_profile['name'],base_profile['email'],reviewed['cover_letter']]
     styles = getSampleStyleSheet()
     styles['Normal'].fontSize=10
     styles['Normal'].leading=14
@@ -208,5 +216,5 @@ def documents(store, profile, job):
         shutil.copyfile(source_path,dest/'resume.pdf')
         (dest/'resume.txt').write_text('\n'.join(page.extract_text() or '' for page in PdfReader(source_path).pages),encoding='utf-8')
     files={name:hashlib.sha256((dest/name).read_bytes()).hexdigest() for name in ('resume.pdf','resume.txt','cover-letter.pdf','cover-letter.txt')}
-    manifest_path.write_text(json.dumps({'created':now(),'job_url':job['url'],'profile_sha256':hashlib.sha256(json.dumps(profile,sort_keys=True).encode()).hexdigest(),'fingerprint':fingerprint,'files':files,'mode':'original PDF + factual cover letter' if source_hash else 'extractive templates; no invented facts'},indent=2),encoding='utf-8')
+    manifest_path.write_text(json.dumps({'created':now(),'job_url':job['url'],'profile_sha256':hashlib.sha256(json.dumps(profile,sort_keys=True).encode()).hexdigest(),'fingerprint':fingerprint,'files':files,'mode':'reviewed job-specific draft' if reviewed else 'original PDF + factual cover letter' if source_hash else 'extractive templates; no invented facts'},indent=2),encoding='utf-8')
     return dest

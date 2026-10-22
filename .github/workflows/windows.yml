@@ -21,6 +21,12 @@ jobs:
       - run: python -m pytest -q
       - name: Desktop interaction checks
         run: xvfb-run -a python -m pytest tests/test_desktop.py -q
+      - name: Capture draft editor layout
+        run: xvfb-run -a python packaging/render_review.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ApplyPilot-UI-review
+          path: screenshots/*.png
   windows:
     timeout-minutes: 20
     needs: test
@@ -38,7 +44,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt -r requirements-dev.txt pyinstaller==6.16.0
       - run: python -m playwright install --no-shell chromium
-      - run: python -m pytest tests/test_core.py tests/test_productivity.py tests/test_recovery.py tests/test_desktop.py -q
+      - run: python -m pytest tests/test_core.py tests/test_productivity.py tests/test_recovery.py tests/test_tailoring.py tests/test_desktop.py -q
         timeout-minutes: 3
       - name: Freeze app with bundled browser
         run: python -m PyInstaller --noconfirm --clean --windowed --name ApplyPilot --collect-all playwright --collect-all reportlab --hidden-import keyring.backends.Windows --copy-metadata google-auth --copy-metadata google-auth-oauthlib --copy-metadata requests-oauthlib --add-data "browsers;browsers" launcher.py
@@ -101,4 +107,4 @@ jobs:
           if [ "$branch_head" != "${{ github.sha }}" ]; then exit 0; fi
           cd installer-output
           sha256sum *.exe > SHA256SUMS.txt
-          gh release create "build-${{ github.run_number }}" *.exe SHA256SUMS.txt --target "${{ github.sha }}" --title "ApplyPilot 0.4 preview" --notes "Recovery backups, queue preflight, bounded queue ranking and embedded-frame privacy fixes. Both editions tested on Windows Server 2022 and 2025. ARM is experimental; check the ARM job result. See README for supported behavior and live-validation limits."
+          gh release create "build-${{ github.run_number }}" *.exe SHA256SUMS.txt --target "${{ github.sha }}" --title "ApplyPilot 0.5 preview" --notes "Job-specific resume and cover-letter drafts, verified fact bank, custom-question proposals and per-job approvals. Both editions tested on Windows Server 2022 and 2025. ARM is experimental; check the ARM job result. See README for supported behavior and live-validation limits."

@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from .core import canonical_url, STATES, now
 
-SETTINGS={'profile','preferences','boards','theme','planned_queue','resume_pdf'}
+SETTINGS={'profile','preferences','boards','theme','planned_queue','resume_pdf','facts'}
 COLUMNS={
+    'drafts':('job_id','payload','context_hash','updated'),
     'jobs':('id','url','company','title','location','description','status','note','updated'),
     'events':('id','job_id','kind','detail','at'),
     'messages':('id','job_id','sender','subject','body','stage','at'),
@@ -68,6 +69,7 @@ def read_backup(path):
         return data,files.get('resume.pdf')
 
 def validate_data(data):
+    if isinstance(data,dict) and set(data)==(set(COLUMNS)-{'drafts'})|{'settings'}:data['drafts']=[]
     if not isinstance(data,dict) or set(data)!=set(COLUMNS)|{'settings'}:raise ValueError('Invalid backup data.')
     settings=data['settings']
     if not isinstance(settings,dict) or not set(settings)<=SETTINGS-{'resume_pdf'}:raise ValueError('Invalid backup settings.')
@@ -86,6 +88,9 @@ def validate_data(data):
         if not isinstance(board,dict) or set(board)!={'provider','company','region'} or board['provider'] not in PROVIDERS or board['region'] not in {'global','eu'}:raise ValueError('Invalid source.')
         board_identifier(board['provider'],board['company'])
     if settings.get('theme','light') not in {'light','dark'}:raise ValueError('Invalid theme.')
+    facts=settings.get('facts',{})
+    from .tailoring import FACTS
+    if not isinstance(facts,dict) or not set(facts)<=set(FACTS) or any(not isinstance(v,str) or len(v)>1000 for v in facts.values()):raise ValueError('Invalid fact bank.')
     ids=set()
     for table,columns in COLUMNS.items():
         rows=data[table]
@@ -97,13 +102,26 @@ def validate_data(data):
                 if table=='events' and key=='id':
                     if type(value) is not int or value<1:raise ValueError('Invalid event ID.')
                 elif value is not None and not isinstance(value,str):raise ValueError('Invalid record value.')
-            if row['id'] is None:raise ValueError('Missing record ID.')
-            if row['id'] in primary:raise ValueError('Duplicate backup record.')
-            primary.add(row['id'])
+            identity=row['job_id'] if table=='drafts' else row['id']
+            if identity is None:raise ValueError('Missing record ID.')
+            if identity in primary:raise ValueError('Duplicate backup record.')
+            primary.add(identity)
             if table=='jobs':
                 if any(not isinstance(row[k],str) for k in columns):raise ValueError('Invalid job value.')
                 if row['status'] not in STATES or hashlib.sha256(canonical_url(row['url']).encode()).hexdigest()[:20]!=row['id']:raise ValueError('Invalid job identity or status.')
                 ids.add(row['id'])
+    for row in data['drafts']:
+        if row['job_id'] not in ids or not isinstance(row['payload'],str):raise ValueError('Invalid draft job.')
+        payload=json.loads(row['payload'])
+        if not isinstance(payload,dict):raise ValueError('Invalid draft payload.')
+        # Restored drafts are editable proposals; all approvals must be renewed.
+        payload['approved_resume']=False;payload['approved_answers']={}
+        if not isinstance(payload.get('resume'),dict) or set(payload['resume'])!=set(('summary','skills','experience','projects','education')) or any(not isinstance(v,str) for v in payload['resume'].values()):raise ValueError('Invalid draft resume.')
+        if not isinstance(payload.get('cover_letter'),str) or not isinstance(payload.get('questions'),dict) or not isinstance(payload.get('gaps'),list) or not isinstance(payload.get('evidence'),dict):raise ValueError('Invalid draft content.')
+        if type(payload.get('use_tailored')) is not bool or any(not isinstance(v,str) for v in payload['gaps']):raise ValueError('Invalid draft options.')
+        for question,proposal in payload['questions'].items():
+            if not isinstance(question,str) or not isinstance(proposal,dict) or not isinstance(proposal.get('answer'),str) or any(not isinstance(proposal.get(k),list) or any(not isinstance(v,str) for v in proposal[k]) for k in ('evidence','missing')):raise ValueError('Invalid question draft.')
+        row['payload']=json.dumps(payload)
     queue=settings.get('planned_queue',[])
     if not isinstance(queue,list) or any(not isinstance(jid,str) or jid not in ids for jid in queue) or len(queue)!=len(set(queue)) or len(queue)>50:raise ValueError('Invalid saved queue.')
 

@@ -48,3 +48,8 @@ Lite selects an installed Edge/Chrome browser. Browser profiles remain separate 
 ## 0.4 review
 
 Form data and resume uploads are restricted to the main page and same-origin frames; cross-origin and opaque frames are skipped. This does not verify the trustworthiness of a user-selected portal. Local backup archives use a fixed file allowlist, bounded sizes, verified hashes and validated data records, with no SQL or archive path extraction. They include personal profile and email content and are not encrypted. OS vault secrets and browser sessions are excluded. Integrity hashes are not signatures. Restore requires an idle app and an explicit in-app replacement confirmation, saves a safety copy, and disables unattended settings. Existing generated documents/receipts are archived separately. No independent security audit has been performed.
+
+
+## 0.5 drafting boundaries
+
+Job-specific drafts and fact-bank values are local readable personal data. Generated proposals are not browser answers until explicitly approved for an exact normalized label and job. Resume/cover-letter edits require separate approval. Changing profile, job description, fact bank or selected original resume invalidates approvals; stale approved documents stop until reviewed or cleared. The local engine uses no remote model endpoint and treats job descriptions as matching text. It does not verify user-entered claims. Restoring data disables all draft approvals. Optimistic revision checks prevent stale editor windows or browser question capture from overwriting newer approvals. Existing global exact answers remain available because the user explicitly saved them. Unsupported controls and verification still pause for manual completion.

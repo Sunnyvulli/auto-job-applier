@@ -6,6 +6,7 @@ import queue
 from pathlib import Path
 from urllib.parse import urlsplit
 from .core import documents, now
+from .tailoring import approved_profile,capture_questions,current_draft
 
 CONFIRMATION = re.compile(r'(thank you for applying|application (?:has been |was )?(?:successfully )?(?:submitted|received)|we have received your application)', re.I)
 
@@ -63,7 +64,11 @@ def fill_page(page, profile, dest):
             if value:
                 try:
                     if el.evaluate('e=>e.tagName')=='SELECT': el.select_option(label=value)
-                    else: el.fill(value)
+                    else:
+                        maximum=el.get_attribute('maxlength')
+                        if maximum and int(maximum)>=0 and len(value)>int(maximum):
+                            unresolved.append(label+' (approved answer exceeds field length)');continue
+                        el.fill(value)
                 except Exception:
                     unresolved.append(label or 'Field could not be filled')
             elif required:
@@ -132,16 +137,18 @@ class BrowserWorker:
             if not source:return None
             path=Path(source)
             return (source,path.stat().st_mtime_ns,path.stat().st_size) if path.is_file() else (source,None)
-        resume_version=resume_signature()
+        resume_version=resume_signature();draft_version=current_draft(self.store,profile,job)
         for step in range(25):
             if self.stop_event.is_set():return 'uncertain'
             if self.confirmed(page,baseline):return 'submitted'
+            job=self.store.job(jid)
             current=self.store.setting('profile',profile)
             current_resume=resume_signature()
-            if current!=profile or current_resume!=resume_version:
+            current_version=current_draft(self.store,current,job)
+            if current!=profile or current_resume!=resume_version or current_version!=draft_version:
                 dest=documents(self.store,current,job)
-                profile=current;resume_version=current_resume
-            missing=fill_page(page,profile,dest)
+                profile=current;resume_version=current_resume;draft_version=current_version
+            missing=fill_page(page,approved_profile(self.store,profile,job),dest)
             passwords=page.locator('input[type=password]:visible').count()
             captcha=page.locator('iframe[src*="captcha"],iframe[title*="challenge" i],.g-recaptcha,.h-captcha').count()
             otp=page.locator('input[autocomplete="one-time-code"]:visible').count()
@@ -150,7 +157,10 @@ class BrowserWorker:
                 if passwords:detail+=' Use Fill saved account for an approved portal.'
                 if otp:detail+=' Use Fetch email code if configured.'
                 if captcha:detail+=' Human verification is required.'
-                if missing:detail+=' '+', '.join(missing)[:250]
+                if missing:
+                    capture_questions(self.store,profile,job,missing)
+                    self.notify({'type':'questions','job_id':jid,'count':len(missing)})
+                    detail+=' '+', '.join(missing)[:250]+' Review drafts in Tailor application.'
                 if not self.pause(jid,detail):return 'uncertain'
                 if self.confirmed(page,baseline):return 'submitted'
                 if not page.locator('input:visible,select:visible,textarea:visible,button:visible').count():return 'uncertain'
@@ -197,6 +207,7 @@ class BrowserWorker:
                     if known_portal(page.url) and 'lever.co' in (urlsplit(page.url).hostname or '') and not urlsplit(page.url).path.endswith('/apply'):
                         link=page.get_by_role('link',name=re.compile('apply for this job',re.I))
                         if link.count():link.first.click()
+                    job=self.store.job(jid)
                     status=self.process(page,jid,job,profile,dest,auto)
                     receipt={'at':now(),'url':page.url,'status':status,'text':page.locator('body').inner_text()[:100000]}
                     (dest/'receipt.json').write_text(json.dumps(receipt,indent=2),encoding='utf-8')

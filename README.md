@@ -1,4 +1,4 @@
-# ApplyPilot 0.4
+# ApplyPilot 0.5
 
 A free local Windows workspace for finding jobs, preparing applications and tracking replies. A native sidebar dashboard, light/dark themes and preference-based queues reduce repeated entry. No paid AI API, hosted server or CAPTCHA-solving subscription is configured.
 
@@ -26,9 +26,9 @@ The dashboard shows your library, prepared documents, applications needing input
 | Area | Implemented behavior |
 |---|---|
 | Job feeds | Greenhouse, Lever global/EU, Ashby, SmartRecruiters |
-| Applications | Exact labeled text fields, native selects, hidden/visible resume uploads, multi-step Next/Continue |
+| Applications | Exact labeled text fields, native selects, hidden/visible resume uploads, multi-step Next/Continue; approved job-specific answers |
 | Automatic submission | Opt-in for recognized Lever/Greenhouse forms; other portals use assisted completion |
-| Documents | Factual profile-derived PDFs/text, or original imported PDF plus a factual cover letter |
+| Documents | Base templates or reviewed job-specific resume/letter PDFs; original-PDF override is explicit per job |
 | Accounts | Generate/save passwords in OS vault; fill only an explicitly approved exact HTTPS origin, top frame only |
 | Registration | Review terms and submit registration in the browser; unattended signup is not implemented |
 | Email verification | User-requested retrieval/filling of one fresh six-digit code from an approved sender for the current origin |
@@ -56,11 +56,25 @@ A synthetic Linux development benchmark with 10,000 jobs measured:
 
 These are local synthetic measurements, not laptop guarantees or network/application timings. Reproduce with `PYTHONPATH=. python benchmarks/run.py`; raw results are in [benchmarks/results-linux.json](benchmarks/results-linux.json).
 
+## Tailor a resume and answer custom questions
+
+1. Save your factual background under **Profile**. Optionally add verified facts such as salary, start date or US work authorization using the fact-bank selector. Facts help propose answers; they do not authorize filling a new question automatically.
+2. In **Job library**, select a job and open **Tailor application**. Paste or edit the actual job description, then choose **Save description + generate draft**. This stores the description locally for matching and drafting.
+3. Review **Resume & letter** and **Changes & evidence**. The local engine prioritizes verified matching skills, adds an application-specific strengths sentence, ranks existing project paragraphs and drafts a factual cover letter. Employment blocks and education are preserved. The possible-gap list uses a fixed technology vocabulary and is not an exhaustive eligibility assessment.
+4. Edit the proposed sections if needed, verify every claim, then **Approve resume & letter**. Your master profile stays unchanged. If an original PDF is configured, it remains selected by default; explicitly check **Use this generated resume PDF for this job** to apply the reviewed resume instead. Without an original PDF, generated-draft mode is selected by default. Preparing PDFs or resuming the browser uses only approved document edits.
+5. Under **Questions**, paste a question or select one detected when the browser paused. Choose **Draft answer**, review the proposed text and its evidence/missing-information note, then **Approve this answer for this job**. Only that exact normalized question label on that job can reuse the approval. Use **Revoke this answer** to remove it. During an application, **Overview → Review drafts** opens the latest paused job or the selected queue job.
+
+This runs locally with no model/API subscription. It uses extractive selection, ranking and templates; it does not perform unrestricted language-model rewriting. Free-form edits are user-authored and require your factual review. No ATS score or employer acceptance is promised.
+
+Questions without supporting facts stay blank. Sponsorship, authorization, salary, years, personal motivation, credentials and demographic questions are not inferred from a resume. Country-specific US facts do not answer other countries' questions. Specific technology-experience questions need verified skills and a supporting saved example. Checkboxes, radio groups, unsupported controls and CAPTCHAs still require manual attention. Overlong approved answers pause rather than being silently truncated.
+
+Profile, fact-bank, original-PDF and job-description changes invalidate prior approvals. An old draft can be reopened as an unapproved proposal and regenerated or reviewed again. Concurrent edits are rejected instead of overwriting a newer revision. Restored backups preserve draft text and facts but disable all draft approvals. Clear a job draft to return to base documents/answers.
+
 ## Backups and recovery
 
 Open **Diagnostics → Export backup** to save a `.applypilot` archive. A daily local backup is also made shortly after startup; the five most recent daily dates are retained under your private data folder's `backups` directory. They are local recovery copies, not off-device protection. A failed backup is reported in Activity.
 
-Backups include your saved profile/answers, preferences, sources, queue, jobs/status/events, stored email messages and selected original resume PDF. They exclude browser cookies, portal vault entries, Gmail OAuth credentials, mail connection settings, generated documents and receipt files. **Backups are not encrypted and include personal information.** Keep exported copies somewhere private.
+Backups include your saved profile/answers, fact bank, job-specific drafts, preferences, sources, queue, jobs/status/events, stored email messages and selected original resume PDF. Older backups without drafts remain accepted. They exclude browser cookies, portal vault entries, Gmail OAuth credentials, mail connection settings, generated documents and receipt files. **Backups are not encrypted and include personal information.** Keep exported copies somewhere private.
 
 **Diagnostics → Restore backup** validates file names, size limits, hashes, record structure and job identities before replacement. Stop the browser and wait for background work first. Restore saves the current workspace into a separate recovery archive and moves existing generated documents/receipts into a recovery folder so old receipts are not confused with restored history. A database failure rolls back the transaction and restores that folder. After success the app closes; reopen it and reconnect email/accounts. Automatic submission and recurring imports/mail sync start disabled. Submitted jobs stay protected; interrupted jobs become uncertain and require checking the portal. Generated documents are rebuilt as needed. SHA256 checks detect damage; they do not prove who created an archive. Import backups only from a trusted source.
 

@@ -5,7 +5,7 @@ pytestmark=pytest.mark.skipif(not os.getenv('DISPLAY') and sys.platform!='win32'
 
 @pytest.fixture(scope='module')
 def desktop_root():
-    # Tk supports one interpreter per application. Share it across GUI test windows.
+    # Share the interpreter to match the single-instance app lifecycle.
     import tkinter as tk
     root=tk.Tk();root.withdraw()
     yield root
@@ -54,4 +54,28 @@ def test_queue_controls_recheck_and_remove(tmp_path,monkeypatch,desktop_root):
         assert app.queued_ids==[] and app.store.setting('planned_queue')==[]
         app.busy_count=1
         with pytest.raises(ValueError,match='background tasks'):app.restore_data()
+    finally:close_window(root)
+
+
+def test_draft_studio_fact_bank_review_and_invalidation(tmp_path,desktop_root):
+    import tkinter as tk
+    from applypilot.desktop import App
+    from applypilot.tailoring import current_draft
+    from applypilot.core import documents
+    root=tk.Toplevel(desktop_root);app=App(root,tmp_path)
+    try:
+        for k,v in [('name','Test User'),('email','test@example.com'),('skills','Python, SQL'),('summary','Built data pipelines.'),('projects','Used Python and SQL for analytics.')]:app.fields[k].insert('1.0',v)
+        app.save_profile();app.fact_category.set('Salary expectation (include currency/period)');app.fact_value.set('100000 USD/year');app.save_fact()
+        jid=app.store.add(dict(url='https://example.com/job',title='Data Engineer',company='Acme',description='Python SQL pipelines'))
+        studio=app.tailor(jid);root.update();assert studio.payload and not studio.payload['approved_resume']
+        studio.editors['summary'].delete('1.0','end');studio.editors['summary'].insert('1.0','My reviewed summary.');studio.use_tailored.set(True);studio.approve_resume()
+        job=app.store.job(jid);p=app.store.setting('profile');dest=documents(app.store,p,job)
+        assert 'My reviewed summary.' in (dest/'resume.txt').read_text()
+        studio.question.set('What is your salary expectation?');studio.draft_answer();assert '100000' in studio.answer.get('1.0','end')
+        studio.approve_answer();assert current_draft(app.store,p,job)['approved_answers']['what is your salary expectation?']=='100000 USD/year'
+        studio.revoke_answer();assert current_draft(app.store,p,job)['approved_answers']=={}
+        studio.editors['summary'].insert('end',' Unsaved edit.');studio.show_changes();assert not studio.payload['approved_resume']
+        app.store.save_setting('facts',{'salary':'110000 USD/year'})
+        with pytest.raises(ValueError,match='changed'):studio.approve_resume()
+        studio.window.destroy()
     finally:close_window(root)

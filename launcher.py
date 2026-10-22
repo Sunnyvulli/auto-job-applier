@@ -31,6 +31,13 @@ def smoke_test(report):
             app.store.save_setting('preferences',{'titles':'Test','min_skills':0,'queue_limit':5})
             assert plan_queue(app.store,app.store.setting('profile'),app.store.setting('preferences'))==[jid]
             checks.append('preference queue')
+            from applypilot.tailoring import generate_draft,save_draft,context_hash
+            with app.store.connect() as c:c.execute('UPDATE jobs SET description=? WHERE id=?',('Test role requiring Python',jid))
+            job=app.store.job(jid);profile=app.store.setting('profile');draft=generate_draft(app.store,profile,job)
+            draft['resume']['summary']='Reviewed synthetic summary';draft['approved_resume']=True;draft['use_tailored']=True
+            save_draft(app.store,jid,draft,context_hash(app.store,profile,job));documents(app.store,profile,job)
+            assert 'Reviewed synthetic summary' in (dest/'resume.txt').read_text(encoding='utf-8')
+            checks.append('reviewed job-specific document generation')
             from applypilot.recovery import create_backup, restore_backup
             from applypilot.core import Store
             backup=create_backup(app.store,Path(folder)/'test.applypilot')

@@ -18,6 +18,7 @@ from . import accounts, google_mail
 from .productivity import resume_text, extract_profile, plan_queue, assess, queue_preflight
 from .system import capabilities
 from .theme import apply_style, UI_FONT, CODE_FONT
+from .tailoring import FACTS
 
 FIELDS=['name','email','phone','location','linkedin','website','skills','summary','experience','projects','education']
 
@@ -28,10 +29,10 @@ class App:
         self.queue=queue.Queue();self.worker=BrowserWorker(self.store,self.queue.put)
         self.auto=tk.BooleanVar(value=self.store.setting('auto_submit',False))
         self.import_lock=threading.Lock();self.mail_sync_lock=threading.Lock()
-        self.busy_count=0;self.offset=0;self.total_jobs=0;self.filter_timer=None
+        self.active_draft_job=None;self.busy_count=0;self.offset=0;self.total_jobs=0;self.filter_timer=None
         self.queued_ids=self.store.setting('planned_queue',[]);self.pages={};self.nav={};self.current_page=''
         self.status=tk.StringVar(value='Welcome. Import your resume once, then set your job preferences.')
-        root.title('ApplyPilot 0.4');root.geometry(f'{min(1240,root.winfo_screenwidth()-60)}x{min(820,root.winfo_screenheight()-90)}');root.minsize(min(960,root.winfo_screenwidth()-40),min(640,root.winfo_screenheight()-60))
+        root.title('ApplyPilot 0.5');root.geometry(f'{min(1240,root.winfo_screenwidth()-60)}x{min(820,root.winfo_screenheight()-90)}');root.minsize(min(960,root.winfo_screenwidth()-40),min(640,root.winfo_screenheight()-60))
         self.colors=apply_style(root,self.store.setting('theme','light'))
         root.grid_rowconfigure(0,weight=1);root.grid_columnconfigure(1,weight=1)
         c=self.colors
@@ -43,7 +44,7 @@ class App:
         self.nav_area=tk.Frame(self.sidebar,bg=c['nav']);self.nav_area.pack(fill='x')
         footer=tk.Frame(self.sidebar,bg=c['nav']);footer.pack(side='bottom',fill='x',padx=20,pady=22)
         tk.Label(footer,text='LOCAL  /  PRIVATE  /  FREE',font=(UI_FONT,8,'bold'),bg=c['nav'],fg=c['navtext']).pack(anchor='w')
-        tk.Label(footer,text='Version 0.4 preview',font=(UI_FONT,9),bg=c['nav'],fg=c['navtext']).pack(anchor='w',pady=(6,0))
+        tk.Label(footer,text='Version 0.5 preview',font=(UI_FONT,9),bg=c['nav'],fg=c['navtext']).pack(anchor='w',pady=(6,0))
         shell=ttk.Frame(root,padding=(24,18,24,12));shell.grid(row=0,column=1,sticky='nsew');shell.grid_rowconfigure(1,weight=1);shell.grid_columnconfigure(0,weight=1)
         top=ttk.Frame(shell);top.grid(row=0,column=0,sticky='ew',pady=(0,18))
         self.page_title=tk.StringVar(value='Overview');ttk.Label(top,textvariable=self.page_title,style='Section.TLabel').pack(side='left')
@@ -122,6 +123,12 @@ class App:
         ttk.Button(qa_buttons,text='Add / update answer',command=lambda:self.guard(self.add_answer)).pack(side='left')
         ttk.Button(qa_buttons,text='Remove selected',command=lambda:self.guard(self.remove_answer)).pack(side='left',padx=6)
         self.render_answers()
+        facts=ttk.Frame(inner);facts.grid(row=len(FIELDS)+1,column=1,sticky='ew',pady=14)
+        ttk.Label(facts,text='Verified fact bank — optional; used only to propose answers',wraplength=540).pack(anchor='w')
+        self.fact_category=tk.StringVar(value=next(iter(FACTS.values())));self.fact_value=tk.StringVar()
+        fact_choice=ttk.Combobox(facts,textvariable=self.fact_category,values=list(FACTS.values()),state='readonly');fact_choice.pack(fill='x',pady=6)
+        ttk.Entry(facts,textvariable=self.fact_value).pack(fill='x');fact_choice.bind('<<ComboboxSelected>>',lambda e:self.load_fact())
+        ttk.Button(facts,text='Save verified fact / clear if blank',command=lambda:self.guard(self.save_fact)).pack(anchor='w',pady=6);self.load_fact()
         canvas.bind('<Enter>',lambda e:canvas.bind_all('<MouseWheel>',lambda event:canvas.yview_scroll(-int(event.delta/120) if abs(event.delta)>=120 else (-1 if event.delta>0 else 1),'units')))
         canvas.bind('<Leave>',lambda e:canvas.unbind_all('<MouseWheel>'))
         buttons=ttk.Frame(t);buttons.pack(fill='x',pady=10)
@@ -153,6 +160,23 @@ class App:
         data=json.loads(self.answers.get('1.0','end'))
         for item in self.answer_list.selection():data.pop(self.answer_list.item(item,'values')[0],None)
         self.answers.delete('1.0','end');self.answers.insert('1.0',json.dumps(data));self.render_answers()
+    def load_fact(self):
+        key=next(k for k,v in FACTS.items() if v==self.fact_category.get());self.fact_value.set(self.store.setting('facts',{}).get(key,''))
+    def save_fact(self):
+        key=next(k for k,v in FACTS.items() if v==self.fact_category.get());value=self.fact_value.get().strip()
+        if key in {'us_work_authorization','us_sponsorship'} and value and value.lower() not in {'yes','no'}:raise ValueError('Enter Yes or No, or leave blank if unknown.')
+        if key=='years' and value:
+            try:valid=0<=float(value)<=70
+            except ValueError:valid=False
+            if not valid:raise ValueError('Enter verified total years as a number between 0 and 70.')
+        if len(value)>1000:raise ValueError('Keep a fact under 1,000 characters.')
+        facts=self.store.setting('facts',{})
+        if value:facts[key]=value.capitalize() if key.startswith('us_') else value
+        else:facts.pop(key,None)
+        self.store.save_setting('facts',facts);self.status.set('Fact saved. Existing job drafts need review after fact changes.')
+    def tailor(self,jid=None):
+        from .studio import DraftStudio
+        return DraftStudio(self,jid or self.selected()[0])
     def jobs_tab(self):
         t=self.tab('Job library')
         ttk.Label(t,text='Find the roles worth your time.',style='Title.TLabel').pack(anchor='w')
@@ -179,9 +203,11 @@ class App:
         pager=ttk.Frame(t);pager.pack(fill='x',pady=8);self.page_label=tk.StringVar();ttk.Label(pager,textvariable=self.page_label,style='Muted.TLabel').pack(side='left')
         ttk.Button(pager,text='Next',command=lambda:self.page_move(1)).pack(side='right');ttk.Button(pager,text='Previous',command=lambda:self.page_move(-1)).pack(side='right',padx=6)
         actions=ttk.Frame(t);actions.pack(fill='x',pady=(4,8))
+        more=ttk.Frame(t);more.pack(fill='x',pady=(0,8))
         ttk.Button(actions,text='Start selected',style='Accent.TButton',command=lambda:self.guard(self.start)).pack(side='left')
         ttk.Button(actions,text='Prepare PDFs',command=lambda:self.guard(self.prepare)).pack(side='left',padx=6)
-        ttk.Button(actions,text='Account tools',command=lambda:self.guard(self.account_tools)).pack(side='left')
+        ttk.Button(actions,text='Tailor application',command=lambda:self.guard(self.tailor)).pack(side='left',padx=6)
+        ttk.Button(more,text='Account tools',command=lambda:self.guard(self.account_tools)).pack(side='left')
         ttk.Button(actions,text='Set status',command=lambda:self.guard(self.set_status)).pack(side='right')
         ttk.Button(actions,text='Refresh',command=self.refresh).pack(side='right',padx=6)
         ttk.Checkbutton(t,text='Submit supported applications automatically after filling known answers',variable=self.auto,command=lambda:self.store.save_setting('auto_submit',self.auto.get())).pack(anchor='w')
@@ -268,6 +294,7 @@ class App:
             import webbrowser
             webbrowser.open(j['url'])
         ttk.Button(bar,text='View employer page',style='Accent.TButton',command=open_job).pack(side='left')
+        ttk.Button(bar,text='Tailor application',command=lambda:self.guard(lambda:self.tailor(j['id']))).pack(side='left',padx=8)
         ttk.Button(bar,text='Open documents',command=lambda:self.guard(lambda:self.open_path(self.store.folder/'documents'/j['id']))).pack(side='left',padx=8)
     def mail_tab(self):
         t=self.tab('3  Email tracker');ttk.Label(t,text='Connect Gmail OAuth, use IMAP with an app password, or import .eml files. Connection remains on your computer.').pack(anchor='w')
@@ -460,6 +487,8 @@ class App:
             except queue.Empty:break
             if isinstance(event,dict):
                 if event['type']=='task_done':self.busy_count=max(0,self.busy_count-1)
+                elif event['type']=='questions':
+                    self.active_draft_job=event['job_id'];self.status.set(f'{event["count"]} questions need review. Select Review drafts to inspect proposed answers.')
                 elif event['type']=='resume_import':self.review_resume(event)
                 elif event['type'] in {'planned','start_planned'}:
                     self.queued_ids=event['ids'];self.store.save_setting('planned_queue',self.queued_ids);self.render_queue()
@@ -503,6 +532,7 @@ class App:
             ttk.Label(card,textvariable=var,style='Card.TLabel',font=(UI_FONT,26,'bold')).pack(anchor='w',pady=(5,0))
         bar=ttk.Frame(t);bar.pack(fill='x',pady=(0,10));ttk.Label(bar,text='Your application queue',style='Section.TLabel').pack(side='left')
         ttk.Button(bar,text='Start my queue',style='Accent.TButton',command=lambda:self.guard(lambda:self.build_queue(True))).pack(side='right')
+        ttk.Button(bar,text='Review drafts',command=lambda:self.guard(lambda:self.tailor(self.queue_tree.selection()[0] if self.queue_tree.selection() else self.active_draft_job))).pack(side='right',padx=5)
         ttk.Button(bar,text='Build queue',command=lambda:self.guard(lambda:self.build_queue(False))).pack(side='right',padx=8)
         self.setup_label=tk.StringVar();ttk.Label(t,textvariable=self.setup_label,style='Muted.TLabel').pack(anchor='w',pady=(0,10))
         queue_panel=ttk.Frame(t);queue_panel.pack(fill='both',expand=True);queue_panel.grid_rowconfigure(0,weight=1);queue_panel.grid_columnconfigure(0,weight=1)

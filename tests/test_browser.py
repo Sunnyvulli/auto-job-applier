@@ -169,9 +169,10 @@ def test_queue_reloads_profile_before_each_job(tmp_path,monkeypatch):
     assert all(store.job(jid)['status']=='submitted' for jid in ids)
 
 
-def test_long_approved_answer_is_not_silently_truncated(page,tmp_path):
+@pytest.mark.parametrize('value',['Too long','😀😀😀'])
+def test_long_approved_answer_is_not_silently_truncated(page,tmp_path,value):
     page.set_content('<label>Custom question<input maxlength=4 required></label>')
-    missing=fill_page(page,{'answers':{'Custom question':'Too long'}},tmp_path)
+    missing=fill_page(page,{'answers':{'Custom question':value}},tmp_path)
     assert page.locator('input').input_value()==''
     assert 'field length' in missing[0]
 

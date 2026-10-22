@@ -66,9 +66,10 @@ def fill_page(page, profile, dest):
                     if el.evaluate('e=>e.tagName')=='SELECT': el.select_option(label=value)
                     else:
                         maximum=el.get_attribute('maxlength')
-                        if maximum and int(maximum)>=0 and len(value)>int(maximum):
+                        if maximum and int(maximum)>=0 and len(value.encode('utf-16-le'))//2>int(maximum):
                             unresolved.append(label+' (approved answer exceeds field length)');continue
                         el.fill(value)
+                        if el.input_value()!=value:unresolved.append(label+' (form changed the approved answer)')
                 except Exception:
                     unresolved.append(label or 'Field could not be filled')
             elif required:

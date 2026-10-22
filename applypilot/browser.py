@@ -38,16 +38,44 @@ def form_frames(page):
     # Embedded external forms require explicit browser entry, including srcdoc/opaque frames.
     return [frame for frame in page.frames if frame==page.main_frame or same_origin(frame.url,page.url)]
 
+def field_label(el):
+    return el.evaluate('''e => { const l=[...(e.labels||[])].map(x=>{const c=x.cloneNode(true);c.querySelectorAll('input,select,textarea,button').forEach(n=>n.remove());return c.textContent;}).join(' '); return l || e.getAttribute('aria-label') || e.getAttribute('placeholder') || e.name || e.id || ''; }''')
+
+def radio_groups(page):
+    result=[]
+    for frame in form_frames(page):
+        for fieldset in frame.locator('fieldset').all():
+            if not fieldset.is_visible():continue
+            legend=fieldset.locator(':scope > legend')
+            controls=fieldset.locator('input[type=radio]')
+            if legend.count()!=1 or not controls.count():continue
+            label=legend.inner_text().strip();items=controls.all()
+            names={el.get_attribute('name') for el in items}
+            if len(names)!=1 or not next(iter(names)) or any(not el.is_visible() or not el.is_enabled() for el in items):continue
+            options=[(field_label(el).strip(),el) for el in items]
+            if any(not name for name,_ in options) or len({name for name,_ in options})!=len(options):continue
+            result.append({'label':label,'options':options})
+    return result
+
 def fill_page(page, profile, dest):
     mapping=answers(profile)
     unresolved=[]
+    from .learning import BLOCKED
+    for group in radio_groups(page):
+        value=mapping.get(normalize(group['label']))
+        if value and not BLOCKED.search(group['label']):
+            choices=[el for label,el in group['options'] if label==value]
+            if len(choices)==1:
+                try:choices[0].check()
+                except Exception:unresolved.append(group['label'])
+            else:unresolved.append(group['label'])
     for frame in form_frames(page):
         for el in frame.locator('input,textarea,select').all():
             if not el.is_enabled(): continue
             typ=(el.get_attribute('type') or '').lower()
             if typ!='file' and not el.is_visible():continue
             if typ in {'hidden','submit','button','reset'}: continue
-            label=el.evaluate('''e => { const l=[...(e.labels||[])].map(x=>{const c=x.cloneNode(true);c.querySelectorAll('input,select,textarea,button').forEach(n=>n.remove());return c.textContent;}).join(' '); return l || e.getAttribute('aria-label') || e.getAttribute('placeholder') || e.name || e.id || ''; }''')
+            label=field_label(el)
             required=el.get_attribute('required') is not None or el.get_attribute('aria-required')=='true' or '*' in label
             key=normalize(label)
             if typ=='file':
@@ -57,8 +85,10 @@ def fill_page(page, profile, dest):
                 elif required: unresolved.append(label or 'Unlabelled upload')
                 continue
             if typ in {'password','checkbox','radio'}:
-                resolved = el.is_checked() if typ in {'checkbox','radio'} else bool(el.input_value())
-                if required and not resolved: unresolved.append(label or typ)
+                resolved=el.evaluate('e=>e.validity.valid') if typ=='radio' else el.is_checked() if typ=='checkbox' else bool(el.input_value())
+                if required and not resolved:
+                    group_label=el.evaluate('e=>e.closest("fieldset")?.querySelector("legend")?.textContent||""') if typ=='radio' else ''
+                    unresolved.append(group_label.strip() or label or typ)
                 continue
             value=mapping.get(key)
             if value:
@@ -119,7 +149,7 @@ class BrowserWorker:
             self.notify('Filled a unique recent email code. Review and continue in the browser. The code was not logged.')
     def pause(self,jid,message):
         self.resume_event.clear();self.store.state(jid,'needs_attention',message)
-        self.notify(message+' Complete the step in the browser, then click Resume.')
+        self.notify(message+' Fix the issue in the browser, then click Resume. To teach answers, Resume before Next/Submit.')
         while not self.resume_event.wait(.3):
             if self.stop_event.is_set():return False
             try:action=self.actions.get_nowait()
@@ -128,6 +158,17 @@ class BrowserWorker:
             except Exception as e:self.notify('Assistance: '+str(e)[:250])
         if self.stop_event.is_set():return False
         self.store.state(jid,'running','Resumed by user');return True
+    def wait_for_help(self,page,jid,message):
+        from .learning import snapshot,remember_corrections,employer_scope
+        before=snapshot(page);job=self.store.job(jid);original_url=page.url;scope=employer_scope(page.url,job)
+        accepted=self.pause(jid,message)
+        if accepted and self.store.setting('learn_answers',True):
+            try:
+                if page.url==original_url and employer_scope(page.url,job)==scope:
+                    count=remember_corrections(self.store,job,page.url,before,snapshot(page))
+                    if count:self.notify(f'Remembered {count} corrected answers for this job. Reuse on later jobs starts after positive submission confirmation.')
+            except Exception:self.notify('Could not remember this correction. Your browser session can continue.')
+        return accepted
     def confirmed(self,page,baseline):
         text=page.locator('body').inner_text()
         return bool(CONFIRMATION.search(text) and text!=baseline and not page.locator('input:not([type=hidden]):not([type=submit]):visible,textarea:visible,select:visible').count())
@@ -138,6 +179,7 @@ class BrowserWorker:
             if not source:return None
             path=Path(source)
             return (source,path.stat().st_mtime_ns,path.stat().st_size) if path.is_file() else (source,None)
+        used_memory=set()
         resume_version=resume_signature();draft_version=current_draft(self.store,profile,job)
         for step in range(25):
             if self.stop_event.is_set():return 'uncertain'
@@ -149,7 +191,15 @@ class BrowserWorker:
             if current!=profile or current_resume!=resume_version or current_version!=draft_version:
                 dest=documents(self.store,current,job)
                 profile=current;resume_version=current_resume;draft_version=current_version
-            missing=fill_page(page,approved_profile(self.store,profile,job),dest)
+            from .learning import snapshot,matching_answers,record_use,disable_used
+            learned,used=matching_answers(self.store,job,page.url,snapshot(page),exclude=(current_version or {}).get('approved_answers',{}))
+            effective=approved_profile(self.store,profile,job)
+            # Explicit job approvals take precedence over automatically remembered answers.
+            overrides={**{normalize(k):str(v) for k,v in effective.get('answers',{}).items()},**learned,**(current_version or {}).get('approved_answers',{})}
+            missing=fill_page(page,dict(effective,answers=overrides),dest)
+            fresh=set(used)-used_memory
+            if fresh:record_use(self.store,fresh);used_memory.update(fresh)
+            self.used_memory=used
             passwords=page.locator('input[type=password]:visible').count()
             captcha=page.locator('iframe[src*="captcha"],iframe[title*="challenge" i],.g-recaptcha,.h-captcha').count()
             otp=page.locator('input[autocomplete="one-time-code"]:visible').count()
@@ -162,18 +212,18 @@ class BrowserWorker:
                     capture_questions(self.store,profile,job,missing)
                     self.notify({'type':'questions','job_id':jid,'count':len(missing)})
                     detail+=' '+', '.join(missing)[:250]+' Review drafts in Tailor application.'
-                if not self.pause(jid,detail):return 'uncertain'
+                if not self.wait_for_help(page,jid,detail):return 'uncertain'
                 if self.confirmed(page,baseline):return 'submitted'
                 if not page.locator('input:visible,select:visible,textarea:visible,button:visible').count():return 'uncertain'
                 continue
             if page.locator('input:invalid,select:invalid,textarea:invalid').count():
-                if not self.pause(jid,'Native form validation needs attention.'):return 'uncertain'
+                if not self.wait_for_help(page,jid,'Native form validation needs attention.'):return 'uncertain'
                 continue
             submit=page.get_by_role('button',name=re.compile(r'^(submit application|submit your application|apply|submit)$',re.I))
             advance=page.get_by_role('button',name=re.compile(r'^(next|continue|save and continue)$',re.I))
             button=submit if submit.count()==1 else advance
             if button.count()!=1:
-                if not self.pause(jid,'A unique supported action button was not found. Continue manually.'):return 'uncertain'
+                if not self.wait_for_help(page,jid,'A unique supported action button was not found. Continue manually.'):return 'uncertain'
                 continue
             before=page.locator('body').inner_text();before_url=page.url
             final=submit.count()==1
@@ -184,7 +234,8 @@ class BrowserWorker:
             except Exception:pass
             if self.confirmed(page,baseline):return 'submitted'
             if page.url==before_url and page.locator('body').inner_text()==before:
-                if not self.pause(jid,'No progress was detected. Check errors before retrying manually.'):return 'uncertain'
+                disable_used(self.store,used)
+                if not self.wait_for_help(page,jid,'No progress was detected. Check errors before retrying manually.'):return 'uncertain'
         return 'uncertain'
     def run(self,ids,auto):
         active=None
@@ -212,6 +263,12 @@ class BrowserWorker:
                     status=self.process(page,jid,job,profile,dest,auto)
                     receipt={'at':now(),'url':page.url,'status':status,'text':page.locator('body').inner_text()[:100000]}
                     (dest/'receipt.json').write_text(json.dumps(receipt,indent=2),encoding='utf-8')
+                    if status=='submitted':
+                        from .learning import confirm_learning
+                        try:
+                            activated=confirm_learning(self.store,jid,self.active_started)
+                            if activated:self.notify(f'Confirmed {activated} learned answers for future matching applications.')
+                        except Exception:self.notify('Submission confirmed, but learning memory could not be activated.')
                     self.store.state(jid,status,'Positive confirmation detected' if status=='submitted' else 'Check portal/email before retrying.')
                     active=None;self.notify(f"{job['company']}: {status}")
                 context.close()

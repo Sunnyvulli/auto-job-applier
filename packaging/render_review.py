@@ -22,5 +22,14 @@ with tempfile.TemporaryDirectory() as folder:
         if name=='questions':studio.question.set('Describe your Python experience');studio.draft_answer()
         root.update();w=studio.window
         ImageGrab.grab(bbox=(w.winfo_rootx(),w.winfo_rooty(),w.winfo_rootx()+w.winfo_width(),w.winfo_rooty()+w.winfo_height())).save(output/(name+'.png'))
+    from applypilot.learning import remember_corrections,confirm_learning
+    job=app.store.job(jid)
+    before={'years of python experience':dict(kind='number',choices=[],answer='',valid=False)}
+    after={'years of python experience':dict(kind='number',choices=[],answer='3',valid=True)}
+    remember_corrections(app.store,job,job['url'],before,after);confirm_learning(app.store,jid)
+    studio.window.withdraw();memory=app.learned_answers();root.update();memory.window.lift();root.update()
+    memory.tree.selection_set(memory.tree.get_children()[0]);memory.details();root.update();w=memory.window
+    ImageGrab.grab(bbox=(w.winfo_rootx(),w.winfo_rooty(),w.winfo_rootx()+w.winfo_width(),w.winfo_rooty()+w.winfo_height())).save(output/'learning.png')
+    memory.window.destroy()
     for callback in root.tk.call('after','info'):root.after_cancel(callback)
     studio.window.destroy();root.destroy()

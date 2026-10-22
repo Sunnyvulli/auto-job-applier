@@ -28,11 +28,12 @@ class App:
         self.store=Store(folder or Path(os.getenv('LOCALAPPDATA',str(Path.home()/'.local/share')))/'ApplyPilot')
         self.queue=queue.Queue();self.worker=BrowserWorker(self.store,self.queue.put)
         self.auto=tk.BooleanVar(value=self.store.setting('auto_submit',False))
+        self.learn_answers=tk.BooleanVar(value=self.store.setting('learn_answers',True))
         self.import_lock=threading.Lock();self.mail_sync_lock=threading.Lock()
         self.active_draft_job=None;self.busy_count=0;self.offset=0;self.total_jobs=0;self.filter_timer=None
         self.queued_ids=self.store.setting('planned_queue',[]);self.pages={};self.nav={};self.current_page=''
         self.status=tk.StringVar(value='Welcome. Import your resume once, then set your job preferences.')
-        root.title('ApplyPilot 0.5');root.geometry(f'{min(1240,root.winfo_screenwidth()-60)}x{min(820,root.winfo_screenheight()-90)}');root.minsize(min(960,root.winfo_screenwidth()-40),min(640,root.winfo_screenheight()-60))
+        root.title('ApplyPilot 0.6');root.geometry(f'{min(1240,root.winfo_screenwidth()-60)}x{min(820,root.winfo_screenheight()-90)}');root.minsize(min(960,root.winfo_screenwidth()-40),min(640,root.winfo_screenheight()-60))
         self.colors=apply_style(root,self.store.setting('theme','light'))
         root.grid_rowconfigure(0,weight=1);root.grid_columnconfigure(1,weight=1)
         c=self.colors
@@ -44,7 +45,7 @@ class App:
         self.nav_area=tk.Frame(self.sidebar,bg=c['nav']);self.nav_area.pack(fill='x')
         footer=tk.Frame(self.sidebar,bg=c['nav']);footer.pack(side='bottom',fill='x',padx=20,pady=22)
         tk.Label(footer,text='LOCAL  /  PRIVATE  /  FREE',font=(UI_FONT,8,'bold'),bg=c['nav'],fg=c['navtext']).pack(anchor='w')
-        tk.Label(footer,text='Version 0.5 preview',font=(UI_FONT,9),bg=c['nav'],fg=c['navtext']).pack(anchor='w',pady=(6,0))
+        tk.Label(footer,text='Version 0.6 preview',font=(UI_FONT,9),bg=c['nav'],fg=c['navtext']).pack(anchor='w',pady=(6,0))
         shell=ttk.Frame(root,padding=(24,18,24,12));shell.grid(row=0,column=1,sticky='nsew');shell.grid_rowconfigure(1,weight=1);shell.grid_columnconfigure(0,weight=1)
         top=ttk.Frame(shell);top.grid(row=0,column=0,sticky='ew',pady=(0,18))
         self.page_title=tk.StringVar(value='Overview');ttk.Label(top,textvariable=self.page_title,style='Section.TLabel').pack(side='left')
@@ -174,6 +175,9 @@ class App:
         if value:facts[key]=value.capitalize() if key.startswith('us_') else value
         else:facts.pop(key,None)
         self.store.save_setting('facts',facts);self.status.set('Fact saved. Existing job drafts need review after fact changes.')
+    def learned_answers(self):
+        from .memory_ui import MemoryWindow
+        return MemoryWindow(self)
     def tailor(self,jid=None):
         from .studio import DraftStudio
         return DraftStudio(self,jid or self.selected()[0])
@@ -207,6 +211,7 @@ class App:
         ttk.Button(actions,text='Start selected',style='Accent.TButton',command=lambda:self.guard(self.start)).pack(side='left')
         ttk.Button(actions,text='Prepare PDFs',command=lambda:self.guard(self.prepare)).pack(side='left',padx=6)
         ttk.Button(actions,text='Tailor application',command=lambda:self.guard(self.tailor)).pack(side='left',padx=6)
+        ttk.Button(more,text='Learned answers',command=lambda:self.guard(self.learned_answers)).pack(side='left',padx=(0,8))
         ttk.Button(more,text='Account tools',command=lambda:self.guard(self.account_tools)).pack(side='left')
         ttk.Button(actions,text='Set status',command=lambda:self.guard(self.set_status)).pack(side='right')
         ttk.Button(actions,text='Refresh',command=self.refresh).pack(side='right',padx=6)
@@ -593,6 +598,8 @@ class App:
         self.low_resource=tk.BooleanVar(value=p.get('low_resource',automatic));ttk.Checkbutton(t,text='Low resource mode: smaller pages and one source import at a time',variable=self.low_resource).pack(anchor='w',pady=8)
         browser=ttk.Frame(t);browser.pack(fill='x',pady=12);ttk.Label(browser,text='Application browser').pack(side='left')
         self.browser_choice=tk.StringVar(value=p.get('browser','auto'));ttk.Combobox(browser,textvariable=self.browser_choice,values=['auto','bundled','msedge','chrome'],state='readonly',width=18).pack(side='left',padx=15)
+        ttk.Checkbutton(t,text='Learn corrections when I Resume and reuse matching confirmed answers',variable=self.learn_answers,command=lambda:self.store.save_setting('learn_answers',self.learn_answers.get())).pack(anchor='w',pady=8)
+        ttk.Button(t,text='Learned answers',command=lambda:self.guard(self.learned_answers)).pack(anchor='w',pady=8)
         ttk.Button(t,text='Save preferences',style='Accent.TButton',command=lambda:self.guard(self.save_preferences)).pack(anchor='w',pady=18)
         ttk.Label(t,text='Matching uses title, location and skill keywords. It does not establish eligibility, sponsorship or employer acceptance.',style='Muted.TLabel',wraplength=700).pack(anchor='w')
     def save_preferences(self):

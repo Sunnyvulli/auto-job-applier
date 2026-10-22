@@ -189,3 +189,42 @@ def test_job_scoped_answer_requires_approval_before_fill(page,tmp_path):
     draft['approved_answers']={q.lower():draft['questions'][q]['answer']};save_draft(store,jid,draft,context_hash(store,p,job))
     assert not fill_page(page,approved_profile(store,p,job),tmp_path)
     assert page.locator('textarea').input_value()=='Built a Python pipeline.'
+
+
+@pytest.mark.parametrize('kind',['number','select','radio'])
+def test_human_fix_learned_after_confirmation_and_reused_next_job(tmp_path,monkeypatch,kind):
+    from applypilot.core import Store
+    from applypilot.browser import BrowserWorker
+    from applypilot.learning import memories
+    import applypilot.system as system
+    store=Store(tmp_path/'data');store.save_setting('profile',{'name':'Test User','email':'test@example.com'})
+    ids=[store.add(dict(url=f'https://jobs.lever.co/acme/{i}/apply',company='Acme',title='Engineer',location='Remote')) for i in range(2)]
+    controls={
+        'number':'<label>Years of Python experience<input id=years type=number required></label>',
+        'select':'<label>Years of Python experience<select id=years required><option value="">Choose</option><option>3</option><option>4</option></select></label>',
+        'radio':'<fieldset><legend>Years of Python experience</legend><label><input id=years type=radio name=years required>3</label><label><input type=radio name=years required>4</label></fieldset>',
+    }
+    body=controls[kind]+'''<button onclick="document.body.innerHTML='Thank you for applying'">Submit application</button>'''
+    def launch(engine,folder,choice):
+        context=engine.launch_persistent_context(str(folder/'test-session'),headless=True)
+        context.route('https://jobs.lever.co/**',lambda r:r.fulfill(content_type='text/html',body=body));return context
+    monkeypatch.setattr(system,'launch_context',launch);log=[];worker=BrowserWorker(store,log.append);pauses=[]
+    def human(jid,message):
+        pauses.append(jid)
+        el=worker.page.locator('#years')
+        if kind=='select':el.select_option(label='3')
+        elif kind=='radio':el.check()
+        else:el.fill('3')
+        return True
+    monkeypatch.setattr(worker,'pause',human);worker.run(ids,True)
+    assert pauses==[ids[0]],log
+    assert all(store.job(jid)['status']=='submitted' for jid in ids),log
+    assert memories(store)[0]['answer']=='3' and memories(store)[0]['status']=='active'
+
+
+def test_snapshot_excludes_secrets_external_frames_and_duplicates(page):
+    from applypilot.learning import snapshot
+    page.set_content('<label>Years of Python experience<input type=number required></label><label>Password<input type=password value=secret></label><label>Verification code<input autocomplete=one-time-code value=123456></label><label>Duplicate<input></label><label>Duplicate<input></label><iframe srcdoc="&lt;label&gt;Other question&lt;input value=x&gt;&lt;/label&gt;"></iframe>')
+    fields=snapshot(page)
+    assert set(fields)=={'years of python experience'}
+    assert fields['years of python experience']['answer']=='' and not fields['years of python experience']['valid']

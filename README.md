@@ -1,4 +1,4 @@
-# ApplyPilot 0.5
+# ApplyPilot 0.6
 
 A free local Windows workspace for finding jobs, preparing applications and tracking replies. A native sidebar dashboard, light/dark themes and preference-based queues reduce repeated entry. No paid AI API, hosted server or CAPTCHA-solving subscription is configured.
 
@@ -26,7 +26,7 @@ The dashboard shows your library, prepared documents, applications needing input
 | Area | Implemented behavior |
 |---|---|
 | Job feeds | Greenhouse, Lever global/EU, Ashby, SmartRecruiters |
-| Applications | Exact labeled text fields, native selects, hidden/visible resume uploads, multi-step Next/Continue; approved job-specific answers |
+| Applications | Exact labeled text fields, native selects/radio groups, hidden/visible resume uploads, multi-step Next/Continue; approved job-specific and confirmed learned answers |
 | Automatic submission | Opt-in for recognized Lever/Greenhouse forms; other portals use assisted completion |
 | Documents | Base templates or reviewed job-specific resume/letter PDFs; original-PDF override is explicit per job |
 | Accounts | Generate/save passwords in OS vault; fill only an explicitly approved exact HTTPS origin, top frame only |
@@ -56,6 +56,18 @@ A synthetic Linux development benchmark with 10,000 jobs measured:
 
 These are local synthetic measurements, not laptop guarantees or network/application timings. Reproduce with `PYTHONPATH=. python benchmarks/run.py`; raw results are in [benchmarks/results-linux.json](benchmarks/results-linux.json).
 
+## Automatic mode with learning
+
+After setup, enable **Submit supported forms automatically** on Overview and start your queue. Supported known forms are filled and submitted sequentially. If a form needs help, the app keeps the browser open and pauses. This is supervised automation with reusable answer memory, not guaranteed unattended operation across every portal.
+
+**Teach an answer:** fill or correct a visible text field, native dropdown or labeled native radio group, then click **Resume before clicking Next or Submit**. With learning enabled (the default), only changed eligible answers are stored. Pending answers can be reused on that same job; a positive submission confirmation activates them for later matching jobs. A correction to an old learned answer retires the old value immediately. A stalled automated action disables memories used on that step rather than blindly retrying them.
+
+Automatic reuse requires the same employer scope, exact normalized question, role title, location, control type, choice labels and unchanged saved profile/fact bank. Memory needs review after 90 days. Shared ATS hosts are separated by employer path; ambiguous embed/login paths do not learn. Explicit job-specific answer approvals take priority. No fuzzy question inference, model training or remote service is involved.
+
+Open **Job library → Learned answers** or **Preferences → Learned answers** to inspect, disable, forget or explicitly enable reviewed memories. You can copy selected answers into global **Profile answers** for cross-employer reuse; do this only when the answer is valid beyond the original employer, role and location. Profile changes then invalidate old scoped memories and job drafts until reviewed again. Turning learning off disables both capture and learned-answer reuse.
+
+Passwords, codes, CAPTCHA, account/security identifiers, contact details, consent, demographic/medical information and reference questions are excluded from capture. File uploads and checkboxes are not learned. Unsupported custom controls, CAPTCHA/2FA, registration, portal redesigns, ambiguous action buttons and server failures can still need your intervention; correcting them does not train new portal workflows. If you advance or submit before Resume, disappeared fields cannot be learned. A manual enable in the memory manager is an explicit override of the confirmation gate. Backups retain memory as disabled records; restore turns learning and automatic submission off.
+
 ## Tailor a resume and answer custom questions
 
 1. Save your factual background under **Profile**. Optionally add verified facts such as salary, start date or US work authorization using the fact-bank selector. Facts help propose answers; they do not authorize filling a new question automatically.
@@ -66,7 +78,7 @@ These are local synthetic measurements, not laptop guarantees or network/applica
 
 This runs locally with no model/API subscription. It uses extractive selection, ranking and templates; it does not perform unrestricted language-model rewriting. Free-form edits are user-authored and require your factual review. No ATS score or employer acceptance is promised.
 
-Questions without supporting facts stay blank. Sponsorship, authorization, salary, years, personal motivation, credentials and demographic questions are not inferred from a resume. Country-specific US facts do not answer other countries' questions. Specific technology-experience questions need verified skills and a supporting saved example. Checkboxes, radio groups, unsupported controls and CAPTCHAs still require manual attention. Overlong approved answers pause rather than being silently truncated.
+Questions without supporting facts stay blank. Sponsorship, authorization, salary, years, personal motivation, credentials and demographic questions are not inferred from a resume. Country-specific US facts do not answer other countries' questions. Specific technology-experience questions need verified skills and a supporting saved example. Checkboxes, unsupported radio layouts, unsupported controls and CAPTCHAs still require manual attention. Overlong approved answers pause rather than being silently truncated.
 
 Profile, fact-bank, original-PDF and job-description changes invalidate prior approvals. An old draft can be reopened as an unapproved proposal and regenerated or reviewed again. Concurrent edits are rejected instead of overwriting a newer revision. Restored backups preserve draft text and facts but disable all draft approvals. Clear a job draft to return to base documents/answers.
 
@@ -74,7 +86,7 @@ Profile, fact-bank, original-PDF and job-description changes invalidate prior ap
 
 Open **Diagnostics → Export backup** to save a `.applypilot` archive. A daily local backup is also made shortly after startup; the five most recent daily dates are retained under your private data folder's `backups` directory. They are local recovery copies, not off-device protection. A failed backup is reported in Activity.
 
-Backups include your saved profile/answers, fact bank, job-specific drafts, preferences, sources, queue, jobs/status/events, stored email messages and selected original resume PDF. Older backups without drafts remain accepted. They exclude browser cookies, portal vault entries, Gmail OAuth credentials, mail connection settings, generated documents and receipt files. **Backups are not encrypted and include personal information.** Keep exported copies somewhere private.
+Backups include your saved profile/answers, fact bank, job-specific drafts, preferences, sources, queue, jobs/status/events, stored email messages, scoped answer memory and selected original resume PDF. Older backups without drafts remain accepted. They exclude browser cookies, portal vault entries, Gmail OAuth credentials, mail connection settings, generated documents and receipt files. **Backups are not encrypted and include personal information.** Keep exported copies somewhere private.
 
 **Diagnostics → Restore backup** validates file names, size limits, hashes, record structure and job identities before replacement. Stop the browser and wait for background work first. Restore saves the current workspace into a separate recovery archive and moves existing generated documents/receipts into a recovery folder so old receipts are not confused with restored history. A database failure rolls back the transaction and restores that folder. After success the app closes; reopen it and reconnect email/accounts. Automatic submission and recurring imports/mail sync start disabled. Submitted jobs stay protected; interrupted jobs become uncertain and require checking the portal. Generated documents are rebuilt as needed. SHA256 checks detect damage; they do not prove who created an archive. Import backups only from a trusted source.
 

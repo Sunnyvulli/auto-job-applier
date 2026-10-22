@@ -79,3 +79,23 @@ def test_draft_studio_fact_bank_review_and_invalidation(tmp_path,desktop_root):
         with pytest.raises(ValueError,match='changed'):studio.approve_resume()
         studio.window.destroy()
     finally:close_window(root)
+
+
+def test_learning_memory_review_and_global_promotion(tmp_path,desktop_root):
+    import tkinter as tk
+    from applypilot.desktop import App
+    from applypilot.learning import remember_corrections,confirm_learning,memories
+    root=tk.Toplevel(desktop_root);app=App(root,tmp_path)
+    try:
+        for k,v in [('name','Test User'),('email','test@example.com')]:app.fields[k].insert('1.0',v)
+        app.save_profile();jid=app.store.add(dict(url='https://jobs.lever.co/acme/test/apply',company='Acme',title='Engineer'))
+        before={'custom question':dict(kind='text',choices=[],answer='',valid=False)};after={'custom question':dict(kind='text',choices=[],answer='Verified answer',valid=True)}
+        job=app.store.job(jid);remember_corrections(app.store,job,job['url'],before,after);confirm_learning(app.store,jid)
+        window=app.learned_answers();root.update();identity=window.tree.get_children()[0]
+        window.tree.selection_set(identity);window.details();assert 'Verified answer' in window.detail.get('1.0','end')
+        window.change('disable');assert memories(app.store)[0]['status']=='disabled'
+        window.tree.selection_set(identity);window.change('enable');assert memories(app.store)[0]['status']=='active'
+        window.tree.selection_set(identity);window.promote();assert app.store.setting('profile')['answers']['custom question']=='Verified answer'
+        window.tree.selection_set(identity);window.change('delete');assert not memories(app.store)
+        window.window.destroy()
+    finally:close_window(root)

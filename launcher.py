@@ -38,6 +38,13 @@ def smoke_test(report):
             save_draft(app.store,jid,draft,context_hash(app.store,profile,job));documents(app.store,profile,job)
             assert 'Reviewed synthetic summary' in (dest/'resume.txt').read_text(encoding='utf-8')
             checks.append('reviewed job-specific document generation')
+            from applypilot.learning import remember_corrections,confirm_learning,matching_answers
+            before={'custom question':dict(kind='text',choices=[],answer='',valid=False)}
+            after={'custom question':dict(kind='text',choices=[],answer='Verified synthetic answer',valid=True)}
+            remember_corrections(app.store,job,job['url'],before,after);confirm_learning(app.store,jid)
+            assert matching_answers(app.store,job,job['url'],before)[0]['custom question']=='Verified synthetic answer'
+            memory_window=app.learned_answers();root.update();assert len(memory_window.tree.get_children())==1;memory_window.window.destroy()
+            checks.append('learning memory and review window')
             from applypilot.recovery import create_backup, restore_backup
             from applypilot.core import Store
             backup=create_backup(app.store,Path(folder)/'test.applypilot')

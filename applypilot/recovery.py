@@ -10,6 +10,7 @@ from .core import canonical_url, STATES, now
 
 SETTINGS={'profile','preferences','boards','theme','planned_queue','resume_pdf','facts'}
 COLUMNS={
+    'answer_memory':('id','scope','role','location','question','kind','choices','answer','profile_hash','source_job','status','uses','updated'),
     'drafts':('job_id','payload','context_hash','updated'),
     'jobs':('id','url','company','title','location','description','status','note','updated'),
     'events':('id','job_id','kind','detail','at'),
@@ -69,7 +70,8 @@ def read_backup(path):
         return data,files.get('resume.pdf')
 
 def validate_data(data):
-    if isinstance(data,dict) and set(data)==(set(COLUMNS)-{'drafts'})|{'settings'}:data['drafts']=[]
+    if isinstance(data,dict) and set(COLUMNS)-{'drafts','answer_memory'}<=set(data) and set(data)<=set(COLUMNS)|{'settings'}:
+        data.setdefault('drafts',[]);data.setdefault('answer_memory',[])
     if not isinstance(data,dict) or set(data)!=set(COLUMNS)|{'settings'}:raise ValueError('Invalid backup data.')
     settings=data['settings']
     if not isinstance(settings,dict) or not set(settings)<=SETTINGS-{'resume_pdf'}:raise ValueError('Invalid backup settings.')
@@ -99,8 +101,8 @@ def validate_data(data):
         for row in rows:
             if not isinstance(row,dict) or set(row)!=set(columns):raise ValueError('Invalid '+table+' record.')
             for key,value in row.items():
-                if table=='events' and key=='id':
-                    if type(value) is not int or value<1:raise ValueError('Invalid event ID.')
+                if (table=='events' and key=='id') or (table=='answer_memory' and key=='uses'):
+                    if type(value) is not int or value<(0 if key=='uses' else 1):raise ValueError('Invalid event ID.')
                 elif value is not None and not isinstance(value,str):raise ValueError('Invalid record value.')
             identity=row['job_id'] if table=='drafts' else row['id']
             if identity is None:raise ValueError('Missing record ID.')
@@ -110,6 +112,14 @@ def validate_data(data):
                 if any(not isinstance(row[k],str) for k in columns):raise ValueError('Invalid job value.')
                 if row['status'] not in STATES or hashlib.sha256(canonical_url(row['url']).encode()).hexdigest()[:20]!=row['id']:raise ValueError('Invalid job identity or status.')
                 ids.add(row['id'])
+    from .learning import KINDS,BLOCKED
+    for row in data['answer_memory']:
+        if row['source_job'] not in ids or row['kind'] not in KINDS or BLOCKED.search(row['question']) or not row['answer'] or len(row['answer'])>20000:raise ValueError('Invalid learned answer.')
+        choices=json.loads(row['choices'])
+        if not isinstance(choices,list) or any(not isinstance(v,str) for v in choices):raise ValueError('Invalid learned choices.')
+        if row['kind'] in {'select','radio'} and row['answer'] not in choices:raise ValueError('Invalid learned selection.')
+        if row['status'] not in {'active','disabled','pending'}:raise ValueError('Invalid memory status.')
+        row['status']='disabled'
     for row in data['drafts']:
         if row['job_id'] not in ids or not isinstance(row['payload'],str):raise ValueError('Invalid draft job.')
         payload=json.loads(row['payload'])
@@ -144,7 +154,7 @@ def restore_backup(store,path):
                 columns=COLUMNS[table]
                 c.executemany('INSERT INTO '+table+'('+','.join(columns)+') VALUES('+','.join('?' for _ in columns)+')',[[row[k] for k in columns] for row in data[table]])
             c.execute('DELETE FROM settings')
-            settings=dict(data['settings'],auto_submit=False,repeat_sources=False,repeat_mail=False,resume_pdf=str(resume) if resume else None)
+            settings=dict(data['settings'],auto_submit=False,learn_answers=False,repeat_sources=False,repeat_mail=False,resume_pdf=str(resume) if resume else None)
             c.executemany('INSERT INTO settings VALUES (?,?)',[(k,json.dumps(v)) for k,v in settings.items()])
             c.execute("UPDATE jobs SET status='uncertain',note='Restored interrupted application: check portal before retrying.' WHERE status IN ('running','needs_attention')")
         return safety

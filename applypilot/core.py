@@ -43,6 +43,8 @@ class Store:
             CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, job_id TEXT, kind TEXT, detail TEXT, at TEXT);
             CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY, job_id TEXT, sender TEXT, subject TEXT, body TEXT, stage TEXT, at TEXT);
             ''')
+            c.execute('CREATE TABLE IF NOT EXISTS answer_memory(id TEXT PRIMARY KEY,scope TEXT NOT NULL,role TEXT NOT NULL,location TEXT NOT NULL,question TEXT NOT NULL,kind TEXT NOT NULL,choices TEXT NOT NULL,answer TEXT NOT NULL,profile_hash TEXT NOT NULL,source_job TEXT NOT NULL,status TEXT NOT NULL,uses INTEGER NOT NULL,updated TEXT NOT NULL)')
+            c.execute('CREATE INDEX IF NOT EXISTS memory_scope ON answer_memory(scope,role,location,profile_hash,status)')
             c.execute('CREATE TABLE IF NOT EXISTS drafts(job_id TEXT PRIMARY KEY, payload TEXT NOT NULL, context_hash TEXT NOT NULL, updated TEXT NOT NULL)')
             c.executescript('CREATE INDEX IF NOT EXISTS jobs_updated ON jobs(updated DESC,id); CREATE INDEX IF NOT EXISTS jobs_status_updated ON jobs(status,updated DESC); CREATE INDEX IF NOT EXISTS messages_time ON messages(at DESC);')
             c.execute("UPDATE jobs SET status='uncertain', note='Interrupted session: check portal before retrying.' WHERE status='running'")
@@ -125,7 +127,7 @@ def _http_session():
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
     if not hasattr(_http_local,'session'):
-        session=requests.Session();session.headers['User-Agent']='ApplyPilot/0.5 personal job assistant'
+        session=requests.Session();session.headers['User-Agent']='ApplyPilot/0.6 personal job assistant'
         adapter=HTTPAdapter(pool_connections=4,pool_maxsize=4,max_retries=Retry(total=2,backoff_factor=.5,status_forcelist=[429,502,503,504],allowed_methods=frozenset(['GET']),respect_retry_after_header=False))
         session.mount('https://',adapter);_http_local.session=session
     return _http_local.session

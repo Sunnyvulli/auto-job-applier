@@ -3,10 +3,22 @@ import sys
 import pytest
 pytestmark=pytest.mark.skipif(not os.getenv('DISPLAY') and sys.platform!='win32',reason='Desktop display required')
 
-def test_dashboard_preferences_answers_and_pagination(tmp_path):
+@pytest.fixture(scope='module')
+def desktop_root():
+    # Tk supports one interpreter per application. Share it across GUI test windows.
+    import tkinter as tk
+    root=tk.Tk();root.withdraw()
+    yield root
+    root.destroy()
+
+def close_window(root):
+    for callback in root.tk.call('after','info'):root.after_cancel(callback)
+    root.destroy()
+
+def test_dashboard_preferences_answers_and_pagination(tmp_path,desktop_root):
     import tkinter as tk
     from applypilot.desktop import App
-    root=tk.Tk();app=App(root,tmp_path)
+    root=tk.Toplevel(desktop_root);app=App(root,tmp_path)
     try:
         for k,v in [('name','Test User'),('email','test@example.com'),('skills','Python, SQL')]:app.fields[k].insert('1.0',v)
         app.qa_question.set('Do you need sponsorship?');app.qa_answer.set('Yes');app.add_answer();app.save_profile()
@@ -23,13 +35,13 @@ def test_dashboard_preferences_answers_and_pagination(tmp_path):
             root.geometry(size)
             for page in app.pages:app.show_page(page);root.update()
         app.toggle_theme();root.update();assert app.store.setting('theme')=='dark'
-    finally:root.destroy()
+    finally:close_window(root)
 
 
-def test_queue_controls_recheck_and_remove(tmp_path,monkeypatch):
+def test_queue_controls_recheck_and_remove(tmp_path,monkeypatch,desktop_root):
     import tkinter as tk
     from applypilot.desktop import App
-    root=tk.Tk();app=App(root,tmp_path)
+    root=tk.Toplevel(desktop_root);app=App(root,tmp_path)
     try:
         app.store.save_setting('profile',{'name':'Test User','email':'test@example.com'})
         app.store.save_setting('preferences',{'titles':'Data Engineer','min_skills':0})
@@ -42,4 +54,4 @@ def test_queue_controls_recheck_and_remove(tmp_path,monkeypatch):
         assert app.queued_ids==[] and app.store.setting('planned_queue')==[]
         app.busy_count=1
         with pytest.raises(ValueError,match='background tasks'):app.restore_data()
-    finally:root.destroy()
+    finally:close_window(root)

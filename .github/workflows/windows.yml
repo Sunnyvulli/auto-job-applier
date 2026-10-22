@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+concurrency:
+  group: applypilot-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -19,6 +22,7 @@ jobs:
       - name: Desktop interaction checks
         run: xvfb-run -a python -m pytest tests/test_desktop.py -q
   windows:
+    timeout-minutes: 20
     needs: test
     strategy:
       fail-fast: false
@@ -35,6 +39,7 @@ jobs:
       - run: pip install -r requirements.txt -r requirements-dev.txt pyinstaller==6.16.0
       - run: python -m playwright install --no-shell chromium
       - run: python -m pytest tests/test_core.py tests/test_productivity.py tests/test_recovery.py tests/test_desktop.py -q
+        timeout-minutes: 3
       - name: Freeze app with bundled browser
         run: python -m PyInstaller --noconfirm --clean --windowed --name ApplyPilot --collect-all playwright --collect-all reportlab --hidden-import keyring.backends.Windows --copy-metadata google-auth --copy-metadata google-auth-oauthlib --copy-metadata requests-oauthlib --add-data "browsers;browsers" launcher.py
       - name: Stage Lite edition
@@ -60,6 +65,7 @@ jobs:
           name: ApplyPilot-Windows-${{ matrix.os }}
           path: installer-output/*.exe
   arm:
+    timeout-minutes: 15
     needs: windows
     runs-on: windows-11-arm
     continue-on-error: true

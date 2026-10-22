@@ -9,7 +9,7 @@ def job(url='https://example.com/jobs/1',**kw):
 
 @pytest.mark.parametrize('location,country,expected',[
     ('Austin | United States','US',True),('Bengaluru | India','IN',True),
-    ('San Jose, CA','Canada',False),('Austin, TX','United States',False),
+    ('CA','Canada',False),('IN','India',False),('San Jose, CA','Canada',False),('Austin, TX','United States',False),
     ('Australia','US',False),('Remote','US',False),('Worldwide','India',False),
     ('London, United Kingdom','UK',True),('London, Ontario | Canada','CA',True),
     ('Remote - USA','US',True),('London | GB','UK',True)])

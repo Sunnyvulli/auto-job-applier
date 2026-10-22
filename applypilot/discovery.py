@@ -59,11 +59,9 @@ def country_matches(location,country):
     for alias in ALIASES.get(country,()):
         if len(normalized(alias).replace(' ',''))>3:
             if contains(location,alias):return True
-        else:
-            # CA is Canada only when a whole location segment, not San Jose, CA.
-            # Ambiguous short codes in free-text locations are intentionally rejected.
-            segments=[x.strip().casefold() for x in re.split(r'[|/()]',location)]
-            if alias in segments:return True
+        elif alias=='uae' and contains(location,alias):return True
+        # Ambiguous short ISO codes in free text (CA, IN, IT, NO…) are
+        # excluded. Provider-structured country codes were expanded to names.
     return False
 
 

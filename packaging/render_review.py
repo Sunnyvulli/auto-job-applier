@@ -13,7 +13,9 @@ with tempfile.TemporaryDirectory() as folder:
     for k,v in values.items():app.fields[k].insert('1.0',v)
     app.save_profile()
     jid=app.store.add(dict(url='https://example.com/job',title='Data Engineer',company='Example Analytics',description='Build reliable pipelines using Python, SQL and AWS. Spark experience is preferred.'))
-    studio=app.tailor(jid);studio.window.lift();root.update()
+    root.update()
+    studio=app.tailor(jid);root.withdraw();studio.window.deiconify();studio.window.lift();root.update()
+    assert studio.window.winfo_viewable(), 'Draft window did not become visible'
     output=Path('screenshots');output.mkdir(exist_ok=True)
     for name,page in [('resume',studio.resume_page),('changes',studio.diff_page),('questions',studio.qa_page)]:
         studio.tabs.select(page)

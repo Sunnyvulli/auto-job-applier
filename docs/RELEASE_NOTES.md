@@ -1,27 +1,22 @@
-# ApplyPilot 0.7.1 — autofill and resume-upload fixes
+# ApplyPilot — startup application learning safeguards
 
-## What was fixed
+Correction memories on shared YC company routes now use the employer slug in the observed URL. Unscoped application routes cannot reuse memories. Sponsorship and work-authorization questions are excluded from learning and lookup of previously stored answers.
 
-Chromium could open before the application controls rendered, leaving the form untouched. Some hidden resume/cover-letter inputs were labelled only **Attach** and were missed. An upload failure could interrupt the remaining contact fields. Some accessible identity labels were not recognized, and custom dropdowns could remain blocked after manual selection.
+## Usage
 
-The browser now waits up to 12 seconds for controls, reads accessible labels/standard identity aliases, identifies Attach uploads from explicit input identity, and reports upload problems while continuing other fields. Activity shows field and document-selection counts. Supported React-select selections can be recognized after manual choice; the app does not automatically choose unknown answers. Profile now has optional explicit **First Name** and **Last Name** values.
+1. Back up local application data and close the app before installing a future packaged build.
+2. Review Profile and facts, then use Job library → Prepare PDFs and inspect the resume.
+3. Open the actual form in the same tab, then Overview → Resume browser.
+4. Review authorization and future sponsorship explicitly; these are not learned answers.
+5. Select a location option, verify the attachment filename and complete CAPTCHA manually. CAPTCHA completion can expire before submission.
+6. Verify a receipt before counting a confirmed submission. Record user-reported submissions separately and suppress duplicates.
 
-## How to use the fix
+See [User Guide](USER_GUIDE.md) and [Startup application playbook](STARTUP_APPLICATION_PLAYBOOK.md).
 
-1. Export a backup in **Diagnostics**, stop the queue and close ApplyPilot.
-2. Install the updated Full/Lite installer and reopen it. No extra dependency or paid service is required. Existing profile/history normally remain in the data folder.
-3. Open **Profile**, check your saved values and optionally set exact **First Name / Last Name**, then **Save profile**. Changing profile values invalidates affected draft approvals/memories until reviewed.
-4. Select a job in **Job library → Prepare PDFs**, inspect the resume, and start it through the application queue.
-5. Let the form load. If it opens on a description page, open the application form in that same tab, then **Overview → Resume browser**.
-6. Check **Activity** and the attachment filename in the browser. A document-selection count is not a submission receipt.
-7. Select any required custom dropdowns manually, then Resume. Unknown answers and verification still need your input.
+## Upgrade and dependencies
 
-See the [complete user guide](https://github.com/Sunnyvulli/auto-job-applier/blob/main/docs/USER_GUIDE.md#autofill-or-resume-upload-is-empty).
+No new runtime dependencies or database migration. Existing blocked memories remain stored but are excluded from matching. No Windows binary has been rebuilt or installed. Versions remain pinned in requirements.txt; hosted browser/Gmail connectors are separate from desktop dependencies.
 
-## Verification
+## Verification and limitations
 
-Local browser regressions cover delayed forms, hidden Attach uploads, accessible labels/identity aliases, upload-error isolation, ambiguous files, custom-dropdown selections and native selects. The complete local suite passed **141 tests**, with five display-dependent desktop checks skipped locally. The release workflow separately gates installers on Linux/browser/desktop checks and Full/Lite installed-app checks on Windows Server 2022/2025; an additional ARM emulation job reports its own result. The installed-app smoke check now tests synthetic field filling and a hidden resume file input. Consult the linked Actions run for the actual results of this build; this text is not proof that a pending check passed.
-
-## Remaining limits
-
-This release does not demonstrate a completed live employer application. It cannot fill every portal or arbitrary tab, choose unknown work-authorization/sponsorship answers, resolve all custom controls, fill external embedded frames or bypass CAPTCHA/2FA. Upload failures still need review. Windows 11 x64 is the laptop target; ARM remains experimental. For a remaining failure, provide the public job URL, app version/edition and Activity message.
+Ran `python -m pytest tests/test_startup_learning.py tests/test_learning.py -q`: **22 passed**. These synthetic regressions cover employer isolation and work-eligibility learning exclusions; they do not demonstrate live ATS success. The observed Tank flow ended with a user-reported submission, without an assistant-observed receipt. CAPTCHA, login, agreements and unsupported controls can require human action. The 20–30 batch target is an operating target, not a guarantee or a newly implemented desktop scheduler.

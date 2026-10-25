@@ -34,3 +34,7 @@
 - Logical backup export/restore, daily recovery copies and queue preflight checks.
 
 Earlier preview work introduced source feeds, the desktop dashboard, document generation, browser assistance, email integration and Windows Full/Lite packaging. See Git history and individual releases for details.
+# Unreleased
+
+- Isolate correction memories by employer on shared YC recruiting pages and disable automatic learning/reuse of work authorization and sponsorship answers.
+- Document startup checks, private applicant data, dependencies, CAPTCHA expiry, location selection, uploads and receipts.

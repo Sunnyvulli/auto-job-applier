@@ -130,3 +130,39 @@ adapter or universal portal coverage. Applicant values and receipts stay private
 Documentation-only update; no runtime behavior changed and no new adapter tests
 or binary build are claimed. Future implementation should use synthetic upload,
 autocomplete, checkbox-state and pending-to-success fixtures.
+
+## Live availability, email applications and unknown answers
+
+Search indexes can retain full job descriptions after the employer closes the
+role. An observed Ashby “Job not found” or a Greenhouse redirect to the catalogue
+with an error flag means the indexed role is not a verified current opening.
+Record the role ID as closed/unavailable and continue; JavaScript-only text
+retrieval alone is not evidence of a closed job or a bot block.
+
+If the employer's current official role explicitly requests email applications,
+verify its published recruiting address, check exact recipient/role history,
+attach the reviewed resume and send one tailored application. Keep a separate
+transport state: Gmail SENT confirms sending, not delivery, employer receipt,
+review or acceptance. Do not use email to evade a blocked portal requirement.
+A general “send us your CV” invitation is a general enquiry, not proof that an
+old indexed vacancy remains open.
+
+Required personal-history questions such as age first programming or first
+language cannot be derived from a degree date. Leave the application pending
+when the reviewed profile lacks the fact. Never learn a guessed biography.
+Record a visible CAPTCHA separately from an explicit terms acceptance or a
+missing applicant fact. None is a confirmed submission.
+
+Synthetic state examples for future adapter regression work (documentation,
+not executable tests or newly implemented support):
+
+| Observed state | Expected record | Submission count |
+| --- | --- | --- |
+| Cached listing; live Job not found | closed_unavailable | 0 |
+| JavaScript-only text; live role not inspected | availability_unverified | 0 |
+| Required first-language answer absent in profile | missing_required_fact | 0 |
+| Published recruiting email; confirmed SENT | email_application_sent | 1 email, 0 portal receipts |
+| Visible robot checkbox | captcha_required | 0 |
+
+This documentation update changes no executable adapter, dependencies or
+installed binary. No runtime regression test or Windows installation is claimed.

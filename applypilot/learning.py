@@ -8,6 +8,8 @@ from .core import now
 
 BLOCKED=re.compile(r'password|passcode|one.time|verification|security code|captcha|authenticat|token|secret|social security|\bssn\b|passport|national.*id|tax.*id|bank|account number|credit card|debit card|birth|\bdob\b|gender|ethnic|\brace\b|veteran|disabil|religion|sexual|medical|consent|\bagree\b|terms|privacy|attest|certify|signature|criminal|background check|reference|\bname\b|\be.?mail\b|phone|address|routing|iban|swift|driver.?s?.?licen[cs]e|national insurance|taxpayer|government.*id|document number|activation code|confirmation code|two.factor|2fa|\botp\b|\bpin\b|^\s*(?:enter\s+)?code\s*[:*]?\s*$',re.I)
 KINDS={'text','textarea','select','email','tel','url','number','date','radio'}
+# Work eligibility is a dated applicant declaration, never an inferred correction.
+BLOCKED=re.compile(BLOCKED.pattern+r'|sponsor|work.*authori[sz]|authori[sz].*work|employment.*visa|immigration|\bcpt\b|\bopt\b',re.I)
 
 def norm(value):return re.sub(r'\s+',' ',re.sub(r'[*:]+$','',value.strip())).strip().lower()
 
@@ -18,6 +20,11 @@ def employer_scope(url,job):
     p=urlsplit(url)
     if p.scheme!='https' or not p.hostname or p.username or p.password:return None
     origin='https://'+p.netloc.lower();parts=[v for v in p.path.split('/') if v]
+    # Shared recruiting hosts must use the employer in the observed route.
+    # An unscoped application/login route cannot inherit a caller's company label.
+    if p.hostname in {'www.ycombinator.com','ycombinator.com','www.workatastartup.com','workatastartup.com'}:
+        if len(parts)<2 or parts[0]!='companies' or parts[1] in {'login','jobs','search'}:return None
+        return origin+' | '+parts[1].lower()
     ats={'jobs.lever.co','jobs.eu.lever.co','boards.greenhouse.io','job-boards.greenhouse.io','jobs.ashbyhq.com','jobs.smartrecruiters.com'}
     if p.hostname in ats and (not parts or parts[0].lower() in {'embed','login','signin','sign_in','register','auth'}):return None
     employer=parts[0].lower() if p.hostname in ats and parts else norm(job['company'])

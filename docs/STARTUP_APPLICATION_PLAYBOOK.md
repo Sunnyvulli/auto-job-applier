@@ -87,3 +87,25 @@ support. Never promote an unconfirmed action to a success example. Fixture tests
 show code behavior; they do not prove delivery, hiring outcomes, live ATS support
 or an installed Windows upgrade. The 20–30 application batch target belongs to
 the operating workflow; it is not a newly implemented desktop scheduler.
+
+## Direct-employer scope and access triage
+
+The operating search includes established direct employers as well as startups.
+Prioritize portals without human verification. A visible application dialog is
+not proof that a CAPTCHA will not appear on submission. Inspect the current
+form before choosing a route; do not classify a plain login or timeout as a bot
+block. Skip verification-dependent forms and continue the batch without solving
+or bypassing their checks. Preserve the exact blocker and application state.
+
+For hosted browser runs, destination-specific permission to share private
+contact information and a resume may be required before filling, even when the
+form itself has no CAPTCHA. Record `awaiting_destination_permission` separately
+from `captcha_required`, `authentication_required` and `submitted_confirmed`.
+An unattended run cannot turn a pending permission into approval. Never use a
+different transport to evade an approval requirement.
+
+Observed public new-graduate YC flow: Apply opens an in-page dialog containing
+identity/contact fields, location autocomplete, two separate authorization
+questions, resume upload and a message. No challenge was visible at initial
+inspection. No submission was made, so this is a discovery example only. Do not
+label it as a successful adapter or train success counters from it.

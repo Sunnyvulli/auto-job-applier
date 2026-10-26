@@ -109,3 +109,24 @@ identity/contact fields, location autocomplete, two separate authorization
 questions, resume upload and a message. No challenge was visible at initial
 inspection. No submission was made, so this is a discovery example only. Do not
 label it as a successful adapter or train success counters from it.
+
+## Observed Ashby submissions
+
+Two hosted-browser applications reached an explicit success confirmation. These
+observations describe those instances only and do not establish a desktop ATS
+adapter or universal portal coverage. Applicant values and receipts stay private.
+
+- The Resume label was not the chooser trigger; the visible Upload File button
+  was. Wait for the chooser before clicking, upload the prepared file, and verify
+  its displayed filename before continuing.
+- Inspect the current accessibility state when a DOM checkbox locator fails.
+  Act on the verified control and check its selected state; never infer an answer
+  or retry clicks blindly.
+- Select a location autocomplete result, rather than leaving uncommitted text.
+- Submission can first disable the button while processing. Wait for explicit
+  Success or a matching receipt before recording a confirmed submission.
+- A challenge-free form in these instances does not predict future challenges.
+
+Documentation-only update; no runtime behavior changed and no new adapter tests
+or binary build are claimed. Future implementation should use synthetic upload,
+autocomplete, checkbox-state and pending-to-success fixtures.
